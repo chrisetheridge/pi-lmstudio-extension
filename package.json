@@ -1,0 +1,30 @@
+{
+  "name": "pi-extension-lmstudio",
+  "version": "0.1.0",
+  "description": "Pi extension that auto-registers LM Studio models as local models.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "lmstudio"
+  ],
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@mariozechner/pi-coding-agent": "0.70.0",
+    "@types/node": "^22.15.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.2"
+  }
+}
