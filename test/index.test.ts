@@ -11,7 +11,7 @@ import {
   parseModelsPayload,
   refreshProvider,
   type LmStudioConfig,
-} from "../index.js";
+} from "../src/index.js";
 
 describe("mergeConfig", () => {
   it("uses defaults when settings are missing", () => {

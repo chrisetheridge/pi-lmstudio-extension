@@ -10,5 +10,5 @@
     "types": ["node", "vitest/globals"],
     "noEmit": true
   },
-  "include": ["index.ts", "test/**/*.test.ts"]
+  "include": ["src/index.ts", "test/**/*.test.ts"]
 }
