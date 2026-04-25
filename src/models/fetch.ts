@@ -54,7 +54,7 @@ export async function fetchNativeModels(
   config: LmStudioConfig,
   fetchImpl: FetchLike = fetch,
 ): Promise<import("../types.js").LmStudioModelInfo[]> {
-  const nativeUrl = config.nativeBaseUrl || deriveNativeBaseUrl(config.baseUrl);
+  const nativeUrl = nativeModelsUrl(config.nativeBaseUrl || deriveNativeBaseUrl(config.baseUrl));
   fetchLog.debug(`fetching models from ${nativeUrl} (timeout: ${config.fetchTimeoutMs}ms)`);
   debugLog("native fetch request", { url: nativeUrl, timeoutMs: config.fetchTimeoutMs, hasApiKey: !!config.apiKey });
 
@@ -97,6 +97,11 @@ function deriveNativeBaseUrl(baseUrl: string): string {
     return normalized.slice(0, -3) + "/api/v1";
   }
   return normalized + "/api/v1";
+}
+
+function nativeModelsUrl(nativeBaseUrl: string): string {
+  const normalized = nativeBaseUrl.replace(/\/+$/, "");
+  return normalized.endsWith("/models") ? normalized : `${normalized}/models`;
 }
 
 /** Fetch model info using the configured metadata source with auto-fallback. */

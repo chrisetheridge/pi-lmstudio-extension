@@ -6,6 +6,7 @@ import {
   DEFAULT_CONFIG,
   buildProviderConfig,
   fetchOpenAiModels,
+  fetchNativeModels,
   fetchLmStudioModels,
   loadConfigFromSettings,
   mergeConfig,
@@ -217,6 +218,17 @@ describe("fetchOpenAiModels", () => {
       expect.objectContaining({ id: "local-model" }),
     ]);
     expect(fetchImpl).toHaveBeenCalledWith("http://192.168.2.88:1234/v1/models", expect.objectContaining({ method: "GET" }));
+  });
+});
+
+describe("fetchNativeModels", () => {
+  it("fetches models from the native /api/v1/models endpoint", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ models: [{ type: "llm", key: "native-model" }] })));
+
+    await expect(fetchNativeModels(mergeConfig({ baseUrl: "http://192.168.2.88:1234" }), fetchImpl)).resolves.toEqual([
+      expect.objectContaining({ id: "native-model" }),
+    ]);
+    expect(fetchImpl).toHaveBeenCalledWith("http://192.168.2.88:1234/api/v1/models", expect.objectContaining({ method: "GET" }));
   });
 });
 
