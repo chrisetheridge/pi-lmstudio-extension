@@ -5,13 +5,25 @@ import { tmpdir } from "node:os";
 import {
   DEFAULT_CONFIG,
   buildProviderConfig,
+  fetchOpenAiModels,
   fetchLmStudioModels,
   loadConfigFromSettings,
   mergeConfig,
   parseModelsPayload,
   refreshProvider,
+  type LmStudioModelInfo,
   type LmStudioConfig,
 } from "../src/index.js";
+
+const rawModel = (id: string): LmStudioModelInfo => ({
+  id,
+  name: id,
+  type: "llm",
+  input: ["text"],
+  loaded: false,
+  loadedInstanceIds: [],
+  source: "openai",
+});
 
 describe("mergeConfig", () => {
   it("uses defaults when settings are missing", () => {
@@ -33,6 +45,7 @@ describe("mergeConfig", () => {
     expect(mergeConfig(globalConfig, projectConfig)).toEqual({
       ...DEFAULT_CONFIG,
       baseUrl: "http://global.test/v1",
+      nativeBaseUrl: "http://global.test/api/v1",
       providerName: "local",
       contextWindow: 64000,
       maxTokens: 8192,
@@ -42,6 +55,13 @@ describe("mergeConfig", () => {
 
   it("normalizes baseUrl by removing trailing slashes", () => {
     expect(mergeConfig({ baseUrl: "http://localhost:1234/v1///" }).baseUrl).toBe("http://localhost:1234/v1");
+  });
+
+  it("accepts a bare LM Studio server URL and normalizes it for OpenAI-compatible requests", () => {
+    expect(mergeConfig({ baseUrl: "http://192.168.2.88:1234" })).toMatchObject({
+      baseUrl: "http://192.168.2.88:1234/v1",
+      nativeBaseUrl: "http://192.168.2.88:1234/api/v1",
+    });
   });
 });
 
@@ -63,6 +83,7 @@ describe("loadConfigFromSettings", () => {
     expect(loaded.config).toEqual({
       ...DEFAULT_CONFIG,
       baseUrl: "http://global.test/v1",
+      nativeBaseUrl: "http://global.test/api/v1",
       contextWindow: 64000,
       maxTokens: 2048,
     });
@@ -108,7 +129,7 @@ describe("parseModelsPayload", () => {
 describe("buildProviderConfig", () => {
   it("uses provider local while preserving raw model IDs", () => {
     const config = mergeConfig();
-    const providerConfig = buildProviderConfig(config, ["qwen2.5-coder-7b"]);
+    const providerConfig = buildProviderConfig(config, [rawModel("qwen2.5-coder-7b")]);
 
     expect(config.providerName).toBe("local");
     expect(providerConfig.models).toMatchObject([
@@ -136,6 +157,17 @@ describe("buildProviderConfig", () => {
   });
 });
 
+describe("fetchOpenAiModels", () => {
+  it("fetches models from the normalized /v1/models endpoint", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: [{ id: "local-model" }] })));
+
+    await expect(fetchOpenAiModels(mergeConfig({ baseUrl: "http://192.168.2.88:1234" }), fetchImpl)).resolves.toEqual([
+      expect.objectContaining({ id: "local-model" }),
+    ]);
+    expect(fetchImpl).toHaveBeenCalledWith("http://192.168.2.88:1234/v1/models", expect.objectContaining({ method: "GET" }));
+  });
+});
+
 describe("fetchLmStudioModels", () => {
   it("fetches and parses models from baseUrl/models", async () => {
     const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ data: [{ id: "local-model" }] })));
@@ -148,7 +180,7 @@ describe("fetchLmStudioModels", () => {
     const fetchImpl = vi.fn(async () => new Response("not found", { status: 404, statusText: "Not Found" }));
 
     await expect(fetchLmStudioModels("http://localhost:1234/v1", fetchImpl)).rejects.toThrow(
-      "LM Studio model fetch failed: 404 Not Found",
+      "model fetch failed: 404 Not Found",
     );
   });
 });
@@ -156,9 +188,9 @@ describe("fetchLmStudioModels", () => {
 describe("refreshProvider", () => {
   it("registers the configured provider with fetched models", async () => {
     const pi = { registerProvider: vi.fn() };
-    const result = await refreshProvider(pi, mergeConfig(), async () => ["raw-model"]);
+    const result = await refreshProvider(pi, mergeConfig(), async () => ({ models: [rawModel("raw-model")], source: "openai" }));
 
-    expect(result).toEqual({ ok: true, count: 1, models: ["raw-model"] });
+    expect(result).toEqual({ ok: true, count: 1, models: ["raw-model"], source: "openai" });
     expect(pi.registerProvider).toHaveBeenCalledWith(
       "local",
       expect.objectContaining({
