@@ -10,6 +10,7 @@ import type { RefreshResult } from "../types.js";
 export default async function lmStudioExtension(pi: ExtensionAPI) {
   let lastResult: RefreshResult | undefined;
   let lastWarnings: string[] = [];
+  const initialCwd = process.cwd();
 
   // Register the debug flag
   pi.registerFlag("lmstudio-debug", {
@@ -33,9 +34,13 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
     return result;
   }
 
+  lastResult = await refresh(initialCwd);
+
   pi.on("session_start", async (_event, ctx) => {
     configureDebugLogging(pi.getFlag("lmstudio-debug"));
-    lastResult = await refresh(ctx.cwd);
+    if (!lastResult || ctx.cwd !== initialCwd) {
+      lastResult = await refresh(ctx.cwd);
+    }
     if (lastResult.ok) {
       log.info(`registered ${lastResult.count} local model${lastResult.count === 1 ? "" : "s"}`);
     } else {

@@ -138,6 +138,46 @@ describe("parseModelsPayload", () => {
   });
 });
 
+describe("parseNativeModelsPayload", () => {
+  it("parses current LM Studio native models responses with a models array", async () => {
+    const { parseNativeModelsPayload } = await import("../src/index.js");
+
+    expect(
+      parseNativeModelsPayload({
+        models: [
+          {
+            type: "llm",
+            key: "unsloth/qwen3.6-35b-a3b",
+            display_name: "Qwen3.6 35B A3B UD",
+            max_context_length: 262144,
+            loaded_instances: [
+              {
+                id: "unsloth/qwen3.6-35b-a3b",
+                config: {
+                  context_length: 64213,
+                },
+              },
+            ],
+            capabilities: {
+              vision: true,
+              trained_for_tool_use: true,
+            },
+          },
+        ],
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        id: "unsloth/qwen3.6-35b-a3b",
+        name: "Qwen3.6 35B A3B UD",
+        input: ["text", "image"],
+        loaded: true,
+        loadedInstanceIds: ["unsloth/qwen3.6-35b-a3b"],
+        contextWindow: 64213,
+      }),
+    ]);
+  });
+});
+
 describe("buildProviderConfig", () => {
   it("uses provider local while preserving raw model IDs", () => {
     const config = mergeConfig();
@@ -223,6 +263,34 @@ describe("refreshProvider", () => {
 });
 
 describe("lmStudioExtension", () => {
+  it("registers discovered models during extension load so saved defaults can restore", async () => {
+    vi.resetModules();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ models: [{ type: "llm", key: "startup-model" }] }))));
+    const root = join(tmpdir(), `pi-extension-lmstudio-extension-${crypto.randomUUID()}`);
+    const agentDir = join(root, "agent");
+    mkdirSync(agentDir, { recursive: true });
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+
+    const { default: lmStudioExtension } = await import("../src/index.js");
+    const pi = {
+      registerFlag: vi.fn(),
+      getFlag: vi.fn(),
+      on: vi.fn(),
+      registerProvider: vi.fn(),
+      unregisterProvider: vi.fn(),
+      registerCommand: vi.fn(),
+    };
+
+    await lmStudioExtension(pi as never);
+
+    expect(pi.registerProvider).toHaveBeenCalledWith(
+      "local",
+      expect.objectContaining({
+        models: [expect.objectContaining({ id: "startup-model" })],
+      }),
+    );
+  });
+
   it("resolves the debug flag on session_start after CLI flags are available", async () => {
     vi.resetModules();
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ data: [] }))));

@@ -72,15 +72,23 @@ export function parseOpenAiModelsPayload(payload: unknown): LmStudioModelInfo[] 
 
 /** Parse a native /api/v1/models response into model info descriptors. */
 export function parseNativeModelsPayload(payload: unknown): LmStudioModelInfo[] {
-  if (!isRecord(payload) || !Array.isArray(payload.data)) {
-    throw new Error("Expected native /api/v1/models response with a data array");
+  if (!isRecord(payload)) {
+    throw new Error("Expected native /api/v1/models response with a data or models array");
+  }
+  const modelEntries = Array.isArray(payload.data)
+    ? payload.data
+    : Array.isArray(payload.models)
+      ? payload.models
+      : undefined;
+  if (!modelEntries) {
+    throw new Error("Expected native /api/v1/models response with a data or models array");
   }
 
-  debugLog("native models payload", { dataLength: payload.data.length, rawPayload: payload });
+  debugLog("native models payload", { dataLength: modelEntries.length, rawPayload: payload });
 
   const results: LmStudioModelInfo[] = [];
 
-  for (const entry of payload.data) {
+  for (const entry of modelEntries) {
     if (!isRecord(entry)) continue;
 
     const type = entry.type;
@@ -110,7 +118,12 @@ export function parseNativeModelsPayload(payload: unknown): LmStudioModelInfo[] 
       if (!isRecord(inst)) continue;
       const instId = typeof inst.id === "string" ? inst.id : undefined;
       if (instId) loadedInstanceIds.push(instId);
-      const instCtx = typeof inst.context_length === "number" ? inst.context_length : undefined;
+      const config = isRecord(inst.config) ? inst.config : undefined;
+      const instCtx = typeof inst.context_length === "number"
+        ? inst.context_length
+        : typeof config?.context_length === "number"
+          ? config.context_length
+          : undefined;
       if (instCtx !== undefined && contextWindow === undefined) {
         contextWindow = instCtx;
       }
