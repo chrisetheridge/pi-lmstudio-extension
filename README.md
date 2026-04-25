@@ -99,6 +99,37 @@ If you want `studio/<model-id>` instead of `local/<model-id>`, set:
 - If no models are returned, the provider is unregistered until the next successful refresh
 - The extension does not write to `~/.pi/agent/models.json`
 
+## Debug Mode
+
+Enable verbose debug logging to trace LM Studio flows:
+
+```bash
+pi --lmstudio-debug
+```
+
+Or set the environment variable:
+
+```bash
+PI_LMSTUDIO_DEBUG=1 pi
+```
+
+With debug mode enabled, you'll see:
+- Settings file paths and contents at each load
+- URL normalization and native URL derivation
+- Full request/response details for model discovery
+- Parsed model metadata (ids, capabilities, context windows)
+- Provider config construction details
+- Auto-fallback flow when trying native → OpenAI
+
+You can also control the log level independently via `PI_LMSTUDIO_LOG`:
+
+| Value | Output |
+|-------|--------|
+| `DEBUG` | All debug + info + warn + error |
+| `INFO` | Info + warn + error (default) |
+| `WARN` | Warn + error |
+| `ERROR` | Error only |
+
 ## Troubleshooting
 
 ### No models show up

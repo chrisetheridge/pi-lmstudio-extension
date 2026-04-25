@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -14,6 +14,18 @@ import {
   type LmStudioModelInfo,
   type LmStudioConfig,
 } from "../src/index.js";
+
+const ORIGINAL_PI_CODING_AGENT_DIR = process.env.PI_CODING_AGENT_DIR;
+
+afterEach(() => {
+  if (ORIGINAL_PI_CODING_AGENT_DIR === undefined) {
+    delete process.env.PI_CODING_AGENT_DIR;
+  } else {
+    process.env.PI_CODING_AGENT_DIR = ORIGINAL_PI_CODING_AGENT_DIR;
+  }
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 const rawModel = (id: string): LmStudioModelInfo => ({
   id,
@@ -207,5 +219,41 @@ describe("refreshProvider", () => {
 
     expect(result).toEqual({ ok: false, error: "connection refused" });
     expect(pi.registerProvider).not.toHaveBeenCalled();
+  });
+});
+
+describe("lmStudioExtension", () => {
+  it("resolves the debug flag on session_start after CLI flags are available", async () => {
+    vi.resetModules();
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ data: [] }))));
+    const root = join(tmpdir(), `pi-extension-lmstudio-extension-${crypto.randomUUID()}`);
+    const agentDir = join(root, "agent");
+    const cwd = join(root, "project");
+    mkdirSync(agentDir, { recursive: true });
+    mkdirSync(cwd, { recursive: true });
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+
+    const { default: lmStudioExtension, isDebugEnabled } = await import("../src/index.js");
+    const handlers = new Map<string, (event: unknown, ctx: { cwd: string; ui: { notify: () => void } }) => Promise<void>>();
+    let flagsAvailable = false;
+    const pi = {
+      registerFlag: vi.fn(),
+      getFlag: vi.fn((name: string) => (flagsAvailable && name === "lmstudio-debug" ? true : undefined)),
+      on: vi.fn((event: string, handler: (event: unknown, ctx: { cwd: string; ui: { notify: () => void } }) => Promise<void>) => {
+        handlers.set(event, handler);
+      }),
+      registerProvider: vi.fn(),
+      unregisterProvider: vi.fn(),
+      registerCommand: vi.fn(),
+    };
+
+    await lmStudioExtension(pi as never);
+
+    expect(isDebugEnabled()).toBe(false);
+
+    flagsAvailable = true;
+    await handlers.get("session_start")?.({ type: "session_start", reason: "new" }, { cwd, ui: { notify: vi.fn() } });
+
+    expect(isDebugEnabled()).toBe(true);
   });
 });

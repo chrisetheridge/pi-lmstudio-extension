@@ -17,17 +17,22 @@ function timestamp(): string {
 
 /** Log levels */
 const LOG_LEVEL = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 } as const;
-let currentLogLevel: (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL] = LOG_LEVEL.INFO;
+type LogLevel = (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL];
 
-/** Set log level from environment or default to INFO */
-const envLevel = process.env.PI_LMSTUDIO_LOG;
-if (envLevel) {
+function logLevelFromEnv(): LogLevel {
+  const envLevel = process.env.PI_LMSTUDIO_LOG;
+  if (!envLevel) return LOG_LEVEL.INFO;
   const parsed = LOG_LEVEL[envLevel.toUpperCase() as keyof typeof LOG_LEVEL];
-  if (parsed !== undefined) currentLogLevel = parsed;
+  return parsed ?? LOG_LEVEL.INFO;
 }
 
+let currentLogLevel: LogLevel = logLevelFromEnv();
+
+/** Whether debug mode is enabled (via CLI flag or env) */
+let debugEnabled = false;
+
 /** Internal logger helper */
-function _log(level: (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL], message: string, ...args: unknown[]): void {
+function _log(level: LogLevel, message: string, ...args: unknown[]): void {
   if (level < currentLogLevel) return;
   const prefix = `${timestamp()} [${NAMESPACE}]`;
   switch (level) {
@@ -52,6 +57,52 @@ export const log = {
   warn: (message: string, ...args: unknown[]) => _log(LOG_LEVEL.WARN, message, ...args),
   error: (message: string, ...args: unknown[]) => _log(LOG_LEVEL.ERROR, message, ...args),
 };
+
+/** Deep-serialize a value for debug logging (safe for objects with circular refs, functions, etc.) */
+function debugSerialize(value: unknown, depth = 0, seen = new Set<string>()): string {
+  if (depth > 5) return "[max depth]";
+  if (value === null) return "null";
+  if (value === undefined) return "undefined";
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  if (typeof value === "function") return `[Function: ${value.name || "<anonymous>"}]`;
+  if (typeof value === "symbol") return value.toString();
+  if (Array.isArray(value)) {
+    const items = value.map((item) => debugSerialize(item, depth + 1, seen));
+    return `[${items.join(", ")}]`;
+  }
+  if (typeof value === "object" && value !== null) {
+    const key = String(Object.prototype.toString.call(value));
+    if (seen.has(key)) return "[circular]";
+    seen.add(key);
+    const entries = Object.entries(value as Record<string, unknown>).map(
+      ([k, v]) => `${k}: ${debugSerialize(v, depth + 1, seen)}`,
+    );
+    return `{ ${entries.join(", ")} }`;
+  }
+  return String(value);
+}
+
+/** Debug-only logging helper — logs detailed metadata when debug mode is active */
+export function debugLog(label: string, data?: unknown): void {
+  if (!debugEnabled) return;
+  const serialized = data !== undefined ? debugSerialize(data) : "(no data)";
+  console.debug(`${timestamp()} [${NAMESPACE}] 🔍 DEBUG ${label}: ${serialized}`);
+}
+
+/** Check if debug mode is active */
+export function isDebugEnabled(): boolean {
+  return debugEnabled;
+}
+
+function configureDebugLogging(flagValue: boolean | string | undefined): void {
+  const debugFromFlag = flagValue === true;
+  const debugFromEnv = process.env.PI_LMSTUDIO_DEBUG === "1" || process.env.PI_LMSTUDIO_DEBUG === "true";
+  debugEnabled = debugFromFlag || debugFromEnv;
+  currentLogLevel = debugEnabled ? LOG_LEVEL.DEBUG : logLevelFromEnv();
+  if (debugEnabled) {
+    log.info("🔍 LM Studio debug mode enabled");
+  }
+}
 
 /** Wrap an async operation and log timing */
 function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
@@ -150,12 +201,16 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /** Derive the native API base URL from an OpenAI-compatible baseUrl. */
 export function deriveNativeBaseUrl(baseUrl: string): string {
   const normalized = baseUrl.replace(/\/+$/, "");
+  let result: string;
   // Replace trailing /v1 with /api/v1
   if (normalized.endsWith("/v1")) {
-    return normalized.slice(0, -3) + "/api/v1";
+    result = normalized.slice(0, -3) + "/api/v1";
+  } else {
+    // If it doesn't end in /v1, just append /api/v1
+    result = normalized + "/api/v1";
   }
-  // If it doesn't end in /v1, just append /api/v1
-  return normalized + "/api/v1";
+  debugLog("derived native base URL", { from: baseUrl, to: result });
+  return result;
 }
 
 /** Normalize the OpenAI-compatible API base URL used for model inference. */
@@ -170,12 +225,22 @@ function normalizeNativeBaseUrl(url: string): string {
 }
 
 function readLmStudioSettings(path: string): { value?: Partial<LmStudioConfig>; warning?: string } {
-  if (!existsSync(path)) return {};
+  if (!existsSync(path)) {
+    debugLog("settings file not found", path);
+    return {};
+  }
 
   try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as unknown;
-    if (!isRecord(parsed) || !isRecord(parsed.lmstudio)) return {};
-    return { value: coercePartialConfig(parsed.lmstudio) };
+    const raw = readFileSync(path, "utf-8");
+    debugLog("settings file contents", { path, contentLength: raw.length });
+    const parsed = JSON.parse(raw) as unknown;
+    if (!isRecord(parsed) || !isRecord(parsed.lmstudio)) {
+      debugLog("no lmstudio key found", { path });
+      return {};
+    }
+    const coerced = coercePartialConfig(parsed.lmstudio);
+    debugLog("coerced lmstudio config", { path, config: coerced });
+    return { value: coerced };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return { warning: `Could not parse ${path}: ${message}` };
@@ -280,6 +345,8 @@ export function parseOpenAiModelsPayload(payload: unknown): LmStudioModelInfo[] 
     throw new Error("Expected LM Studio /v1/models response with a data array");
   }
 
+  debugLog("openai models payload", { dataLength: payload.data.length, rawPayload: payload });
+
   const results: LmStudioModelInfo[] = [];
 
   for (const entry of payload.data) {
@@ -301,6 +368,7 @@ export function parseOpenAiModelsPayload(payload: unknown): LmStudioModelInfo[] 
     });
   }
 
+  debugLog("parsed openai models", results);
   return results;
 }
 
@@ -309,6 +377,8 @@ export function parseNativeModelsPayload(payload: unknown): LmStudioModelInfo[] 
   if (!isRecord(payload) || !Array.isArray(payload.data)) {
     throw new Error("Expected native /api/v1/models response with a data array");
   }
+
+  debugLog("native models payload", { dataLength: payload.data.length, rawPayload: payload });
 
   const results: LmStudioModelInfo[] = [];
 
@@ -319,7 +389,10 @@ export function parseNativeModelsPayload(payload: unknown): LmStudioModelInfo[] 
     const modelType = type === "llm" || type === "embedding" ? type : "unknown";
 
     // Skip embedding models unless explicitly requested
-    if (modelType === "embedding") continue;
+    if (modelType === "embedding") {
+      debugLog("skipping embedding model", { id: (entry as Record<string, unknown>).key });
+      continue;
+    }
 
     const key = typeof entry.key === "string" ? entry.key.trim() : "";
     const displayName = typeof entry.display_name === "string" ? entry.display_name.trim() : "";
@@ -360,6 +433,7 @@ export function parseNativeModelsPayload(payload: unknown): LmStudioModelInfo[] 
     });
   }
 
+  debugLog("parsed native models", results);
   return results;
 }
 
@@ -407,6 +481,7 @@ export async function fetchOpenAiModels(
 ): Promise<LmStudioModelInfo[]> {
   const cleanUrl = config.baseUrl.replace(/\/+$/, "");
   log.debug(`fetching models from ${cleanUrl}/models (timeout: ${config.fetchTimeoutMs}ms)`);
+  debugLog("openai fetch request", { url: `${cleanUrl}/models`, timeoutMs: config.fetchTimeoutMs, hasApiKey: !!config.apiKey });
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.fetchTimeoutMs);
@@ -419,8 +494,11 @@ export async function fetchOpenAiModels(
     });
     const fetchMs = (performance.now() - start).toFixed(2);
     log.debug(`fetch response received in ${fetchMs}ms (status: ${response.status})`);
+    debugLog("openai fetch response", { status: response.status, statusText: response.statusText, headers: Object.fromEntries(response.headers.entries()), ok: response.ok });
 
     if (!response.ok) {
+      const body = await response.text().catch(() => "<unreadable>");
+      debugLog("openai fetch error response", { status: response.status, body });
       throw new Error(`model fetch failed: ${response.status} ${response.statusText}`.trim());
     }
 
@@ -429,6 +507,7 @@ export async function fetchOpenAiModels(
     return models;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
+      debugLog("openai fetch aborted", { timeoutMs: config.fetchTimeoutMs });
       throw new Error(`model fetch timed out after ${config.fetchTimeoutMs}ms`);
     }
     throw error;
@@ -444,6 +523,7 @@ export async function fetchNativeModels(
 ): Promise<LmStudioModelInfo[]> {
   const nativeUrl = config.nativeBaseUrl || deriveNativeBaseUrl(config.baseUrl);
   log.debug(`fetching models from ${nativeUrl} (timeout: ${config.fetchTimeoutMs}ms)`);
+  debugLog("native fetch request", { url: nativeUrl, timeoutMs: config.fetchTimeoutMs, hasApiKey: !!config.apiKey });
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.fetchTimeoutMs);
@@ -456,8 +536,11 @@ export async function fetchNativeModels(
     });
     const fetchMs = (performance.now() - start).toFixed(2);
     log.debug(`fetch response received in ${fetchMs}ms (status: ${response.status})`);
+    debugLog("native fetch response", { status: response.status, statusText: response.statusText, headers: Object.fromEntries(response.headers.entries()), ok: response.ok });
 
     if (!response.ok) {
+      const body = await response.text().catch(() => "<unreadable>");
+      debugLog("native fetch error response", { status: response.status, body });
       throw new Error(`native model fetch failed: ${response.status} ${response.statusText}`.trim());
     }
 
@@ -466,6 +549,7 @@ export async function fetchNativeModels(
     return models;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
+      debugLog("native fetch aborted", { timeoutMs: config.fetchTimeoutMs });
       throw new Error(`native model fetch timed out after ${config.fetchTimeoutMs}ms`);
     }
     throw error;
@@ -479,44 +563,61 @@ export async function fetchLmStudioModelInfo(
   config: LmStudioConfig,
   fetchImpl: FetchLike = fetch,
 ): Promise<{ models: LmStudioModelInfo[]; source: "openai" | "native" }> {
+  debugLog("fetch model info", { modelMetadataSource: config.modelMetadataSource, baseUrl: config.baseUrl, nativeBaseUrl: config.nativeBaseUrl });
+
   if (config.modelMetadataSource === "native") {
+    debugLog("using native metadata source (explicit)");
     const models = await fetchNativeModels(config, fetchImpl);
     return { models, source: "native" };
   }
 
   if (config.modelMetadataSource === "openai") {
+    debugLog("using openai metadata source (explicit)");
     const models = await fetchOpenAiModels(config, fetchImpl);
     return { models, source: "openai" };
   }
 
   // Auto: try native first, fall back to OpenAI
+  debugLog("auto mode: trying native first");
   try {
     const models = await fetchNativeModels(config, fetchImpl);
+    debugLog("auto mode: native succeeded", { modelCount: models.length });
     return { models, source: "native" };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     log.warn(`native model discovery failed (${msg}), falling back to OpenAI-compatible endpoint`);
+    debugLog("auto mode: native failed, falling back to openai", { error: msg });
     const models = await fetchOpenAiModels(config, fetchImpl);
     return { models, source: "openai" };
   }
 }
 
 export function buildProviderConfig(config: LmStudioConfig, models: LmStudioModelInfo[]): ProviderConfig {
+  const providerModels = models.map((model) => ({
+    id: model.id,
+    name: model.name,
+    api: "openai-completions" as const,
+    reasoning: model.reasoning ?? config.reasoning,
+    input: model.input,
+    cost: { ...ZERO_COST },
+    contextWindow: model.contextWindow ?? config.contextWindow,
+    maxTokens: model.maxTokens ?? config.maxTokens,
+    compat: { ...LOCAL_OPENAI_COMPAT },
+  }));
+
+  debugLog("built provider config", {
+    baseUrl: config.baseUrl,
+    apiKey: config.apiKey,
+    api: "openai-completions",
+    modelCount: providerModels.length,
+    models: providerModels,
+  });
+
   return {
     baseUrl: config.baseUrl,
     apiKey: config.apiKey,
     api: "openai-completions",
-    models: models.map((model) => ({
-      id: model.id,
-      name: model.name,
-      api: "openai-completions" as const,
-      reasoning: model.reasoning ?? config.reasoning,
-      input: model.input,
-      cost: { ...ZERO_COST },
-      contextWindow: model.contextWindow ?? config.contextWindow,
-      maxTokens: model.maxTokens ?? config.maxTokens,
-      compat: { ...LOCAL_OPENAI_COMPAT },
-    })),
+    models: providerModels,
   };
 }
 
@@ -528,14 +629,17 @@ export async function refreshProvider(
 ): Promise<RefreshResult> {
   const start = performance.now();
   log.info(`refreshing provider '${config.providerName}' at ${config.baseUrl}`);
+  debugLog("refresh start", { providerName: config.providerName, baseUrl: config.baseUrl, fetchTimeoutMs: config.fetchTimeoutMs });
 
   try {
     const { models, source } = await fetchModelInfo(config);
+    debugLog("refresh result", { modelCount: models.length, source, modelIds: models.map((m) => m.id) });
     if (models.length === 0) {
       log.warn(`no models found, unregistering provider '${config.providerName}'`);
       pi.unregisterProvider?.(config.providerName);
     } else {
-      pi.registerProvider(config.providerName, buildProviderConfig(config, models));
+      const providerConfig = buildProviderConfig(config, models);
+      pi.registerProvider(config.providerName, providerConfig);
       const ms = (performance.now() - start).toFixed(2);
       log.info(`provider '${config.providerName}' registered with ${models.length} model${models.length === 1 ? "" : "s"} in ${ms}ms (source: ${source})`);
     }
@@ -544,6 +648,7 @@ export async function refreshProvider(
   } catch (error) {
     const ms = (performance.now() - start).toFixed(2);
     const msg = error instanceof Error ? error.message : String(error);
+    debugLog("refresh error", { providerName: config.providerName, error: msg, elapsedMs: ms });
     log.error(`refresh failed for '${config.providerName}' after ${ms}ms: ${msg}`);
     return { ok: false, error: msg };
   }
@@ -554,6 +659,13 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
   let lastWarnings: string[] = [];
   let lastDiscoverySource: "openai" | "native" | undefined;
 
+  // Register the debug flag
+  pi.registerFlag("lmstudio-debug", {
+    description: "Enable verbose debug logging for LM Studio extension flows",
+    type: "boolean",
+    default: false,
+  });
+
   async function refresh(cwd = process.cwd()): Promise<RefreshResult> {
     log.debug(`refreshing from cwd: ${cwd}`);
     const loaded = loadConfigFromSettings(cwd);
@@ -562,6 +674,17 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
       log.debug(`config warnings: ${loaded.warnings.join(", ")}`);
     }
     log.debug(`effective config: baseUrl=${loaded.config.baseUrl}, provider=${loaded.config.providerName}, contextWindow=${loaded.config.contextWindow}, maxTokens=${loaded.config.maxTokens}`);
+    debugLog("effective config after merge", {
+      baseUrl: loaded.config.baseUrl,
+      apiKey: loaded.config.apiKey,
+      providerName: loaded.config.providerName,
+      contextWindow: loaded.config.contextWindow,
+      maxTokens: loaded.config.maxTokens,
+      fetchTimeoutMs: loaded.config.fetchTimeoutMs,
+      modelMetadataSource: loaded.config.modelMetadataSource,
+      nativeBaseUrl: loaded.config.nativeBaseUrl,
+      includeEmbeddingModels: loaded.config.includeEmbeddingModels,
+    });
     lastResult = await refreshProvider(pi, loaded.config);
     if (lastResult.ok) {
       lastDiscoverySource = lastResult.source;
@@ -569,15 +692,19 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
     return lastResult;
   }
 
-  lastResult = await refresh();
-  if (lastResult.ok) {
-    log.info(`registered ${lastResult.count} local model${lastResult.count === 1 ? "" : "s"}`);
-  } else {
-    log.error(`initial refresh failed: ${lastResult.error}`);
-  }
-  for (const warning of lastWarnings) {
-    log.warn(warning);
-  }
+  pi.on("session_start", async (_event, ctx) => {
+    configureDebugLogging(pi.getFlag("lmstudio-debug"));
+    lastResult = await refresh(ctx.cwd);
+    if (lastResult.ok) {
+      log.info(`registered ${lastResult.count} local model${lastResult.count === 1 ? "" : "s"}`);
+      debugLog("registered models", lastResult.models);
+    } else {
+      log.error(`initial refresh failed: ${lastResult.error}`);
+    }
+    for (const warning of lastWarnings) {
+      log.warn(warning);
+    }
+  });
 
   pi.registerCommand("lmstudio-refresh", {
     description: "Refresh LM Studio local models",
