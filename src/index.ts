@@ -391,7 +391,7 @@ export async function fetchLmStudioModels(
     }
 
     const models = parseModelsPayload(await response.json());
-    log.info(`found ${models.length} model${models.length === 1 ? "" : "s"}`);
+    debugLog(`found ${models.length} model${models.length === 1 ? "" : "s"}`);
     return models;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -432,7 +432,7 @@ export async function fetchOpenAiModels(
     }
 
     const models = parseOpenAiModelsPayload(await response.json());
-    log.info(`found ${models.length} model${models.length === 1 ? "" : "s"} via OpenAI-compatible endpoint`);
+    debugLog(`found ${models.length} model${models.length === 1 ? "" : "s"} via OpenAI-compatible endpoint`);
     return models;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -514,7 +514,7 @@ export async function fetchLmStudioModelInfo(
     return { models, source: "native" };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    log.warn(`native model discovery failed (${msg}), falling back to OpenAI-compatible endpoint`);
+    debugLog(`native model discovery failed (${msg}), falling back to OpenAI-compatible endpoint`);
     debugLog("auto mode: native failed, falling back to openai", { error: msg });
     const models = await fetchOpenAiModels(config, fetchImpl);
     return { models, source: "openai" };
@@ -557,7 +557,7 @@ export async function refreshProvider(
     fetchLmStudioModelInfo(currentConfig, fetch),
 ): Promise<RefreshResult> {
   const start = performance.now();
-  log.info(`refreshing provider '${config.providerName}' at ${config.baseUrl}`);
+  debugLog(`refreshing provider '${config.providerName}' at ${config.baseUrl}`);
   debugLog("refresh start", { providerName: config.providerName, baseUrl: config.baseUrl, fetchTimeoutMs: config.fetchTimeoutMs });
 
   try {
