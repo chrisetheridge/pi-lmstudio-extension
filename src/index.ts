@@ -3,90 +3,20 @@ import { join } from "node:path";
 import type { ExtensionAPI, ProviderConfig } from "@mariozechner/pi-coding-agent";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
 
+import { consola } from "consola";
+
 const NAMESPACE = "lmstudio";
 
-/** Format a timestamp as [HH:MM:SS.mmm] */
-function timestamp(): string {
-  const now = new Date();
-  const h = String(now.getHours()).padStart(2, "0");
-  const m = String(now.getMinutes()).padStart(2, "0");
-  const s = String(now.getSeconds()).padStart(2, "0");
-  const ms = String(now.getMilliseconds()).padStart(3, "0");
-  return `[${h}:${m}:${s}.${ms}]`;
-}
-
-/** Log levels */
-const LOG_LEVEL = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 } as const;
-type LogLevel = (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL];
-
-function logLevelFromEnv(): LogLevel {
-  const envLevel = process.env.PI_LMSTUDIO_LOG;
-  if (!envLevel) return LOG_LEVEL.INFO;
-  const parsed = LOG_LEVEL[envLevel.toUpperCase() as keyof typeof LOG_LEVEL];
-  return parsed ?? LOG_LEVEL.INFO;
-}
-
-let currentLogLevel: LogLevel = logLevelFromEnv();
+/** Tagged consola instance for the LM Studio extension */
+const log = consola.withTag(NAMESPACE);
 
 /** Whether debug mode is enabled (via CLI flag or env) */
 let debugEnabled = false;
 
-/** Internal logger helper */
-function _log(level: LogLevel, message: string, ...args: unknown[]): void {
-  if (level < currentLogLevel) return;
-  const prefix = `${timestamp()} [${NAMESPACE}]`;
-  switch (level) {
-    case LOG_LEVEL.DEBUG:
-      console.debug(`${prefix} DEBUG`, message, ...args);
-      break;
-    case LOG_LEVEL.INFO:
-      console.log(`${prefix} INFO`, message, ...args);
-      break;
-    case LOG_LEVEL.WARN:
-      console.warn(`${prefix} WARN`, message, ...args);
-      break;
-    case LOG_LEVEL.ERROR:
-      console.error(`${prefix} ERROR`, message, ...args);
-      break;
-  }
-}
-
-export const log = {
-  debug: (message: string, ...args: unknown[]) => _log(LOG_LEVEL.DEBUG, message, ...args),
-  info: (message: string, ...args: unknown[]) => _log(LOG_LEVEL.INFO, message, ...args),
-  warn: (message: string, ...args: unknown[]) => _log(LOG_LEVEL.WARN, message, ...args),
-  error: (message: string, ...args: unknown[]) => _log(LOG_LEVEL.ERROR, message, ...args),
-};
-
-/** Deep-serialize a value for debug logging (safe for objects with circular refs, functions, etc.) */
-function debugSerialize(value: unknown, depth = 0, seen = new Set<string>()): string {
-  if (depth > 5) return "[max depth]";
-  if (value === null) return "null";
-  if (value === undefined) return "undefined";
-  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
-  if (typeof value === "function") return `[Function: ${value.name || "<anonymous>"}]`;
-  if (typeof value === "symbol") return value.toString();
-  if (Array.isArray(value)) {
-    const items = value.map((item) => debugSerialize(item, depth + 1, seen));
-    return `[${items.join(", ")}]`;
-  }
-  if (typeof value === "object" && value !== null) {
-    const key = String(Object.prototype.toString.call(value));
-    if (seen.has(key)) return "[circular]";
-    seen.add(key);
-    const entries = Object.entries(value as Record<string, unknown>).map(
-      ([k, v]) => `${k}: ${debugSerialize(v, depth + 1, seen)}`,
-    );
-    return `{ ${entries.join(", ")} }`;
-  }
-  return String(value);
-}
-
 /** Debug-only logging helper — logs detailed metadata when debug mode is active */
 export function debugLog(label: string, data?: unknown): void {
   if (!debugEnabled) return;
-  const serialized = data !== undefined ? debugSerialize(data) : "(no data)";
-  console.debug(`${timestamp()} [${NAMESPACE}] 🔍 DEBUG ${label}: ${serialized}`);
+  log.debug(label, data);
 }
 
 /** Check if debug mode is active */
@@ -98,9 +28,8 @@ function configureDebugLogging(flagValue: boolean | string | undefined): void {
   const debugFromFlag = flagValue === true;
   const debugFromEnv = process.env.PI_LMSTUDIO_DEBUG === "1" || process.env.PI_LMSTUDIO_DEBUG === "true";
   debugEnabled = debugFromFlag || debugFromEnv;
-  currentLogLevel = debugEnabled ? LOG_LEVEL.DEBUG : logLevelFromEnv();
   if (debugEnabled) {
-    log.info("🔍 LM Studio debug mode enabled");
+    log.info("LM Studio debug mode enabled");
   }
 }
 
