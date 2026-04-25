@@ -3,6 +3,73 @@ import { join } from "node:path";
 import type { ExtensionAPI, ProviderConfig } from "@mariozechner/pi-coding-agent";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
 
+const NAMESPACE = "lmstudio";
+
+/** Format a timestamp as [HH:MM:SS.mmm] */
+function timestamp(): string {
+  const now = new Date();
+  const h = String(now.getHours()).padStart(2, "0");
+  const m = String(now.getMinutes()).padStart(2, "0");
+  const s = String(now.getSeconds()).padStart(2, "0");
+  const ms = String(now.getMilliseconds()).padStart(3, "0");
+  return `[${h}:${m}:${s}.${ms}]`;
+}
+
+/** Log levels */
+const LOG_LEVEL = { DEBUG: 0, INFO: 1, WARN: 2, ERROR: 3 } as const;
+let currentLogLevel: (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL] = LOG_LEVEL.INFO;
+
+/** Set log level from environment or default to INFO */
+const envLevel = process.env.PI_LMSTUDIO_LOG;
+if (envLevel) {
+  const parsed = LOG_LEVEL[envLevel.toUpperCase() as keyof typeof LOG_LEVEL];
+  if (parsed !== undefined) currentLogLevel = parsed;
+}
+
+/** Internal logger helper */
+function _log(level: (typeof LOG_LEVEL)[keyof typeof LOG_LEVEL], message: string, ...args: unknown[]): void {
+  if (level < currentLogLevel) return;
+  const prefix = `${timestamp()} [${NAMESPACE}]`;
+  switch (level) {
+    case LOG_LEVEL.DEBUG:
+      console.debug(`${prefix} DEBUG`, message, ...args);
+      break;
+    case LOG_LEVEL.INFO:
+      console.log(`${prefix} INFO`, message, ...args);
+      break;
+    case LOG_LEVEL.WARN:
+      console.warn(`${prefix} WARN`, message, ...args);
+      break;
+    case LOG_LEVEL.ERROR:
+      console.error(`${prefix} ERROR`, message, ...args);
+      break;
+  }
+}
+
+export const log = {
+  debug: (message: string, ...args: unknown[]) => _log(LOG_LEVEL.DEBUG, message, ...args),
+  info: (message: string, ...args: unknown[]) => _log(LOG_LEVEL.INFO, message, ...args),
+  warn: (message: string, ...args: unknown[]) => _log(LOG_LEVEL.WARN, message, ...args),
+  error: (message: string, ...args: unknown[]) => _log(LOG_LEVEL.ERROR, message, ...args),
+};
+
+/** Wrap an async operation and log timing */
+function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  const start = performance.now();
+  log.debug(`▶ ${label}`);
+  return fn()
+    .then((result) => {
+      const ms = performance.now() - start;
+      log.debug(`✓ ${label} completed in ${ms.toFixed(2)}ms`);
+      return result;
+    })
+    .catch((err) => {
+      const ms = performance.now() - start;
+      log.error(`✗ ${label} failed after ${ms.toFixed(2)}ms: ${err instanceof Error ? err.message : err}`);
+      throw err;
+    });
+}
+
 type ModelInput = "text" | "image";
 
 export interface LmStudioConfig {
@@ -34,6 +101,7 @@ interface RefreshProviderApi {
 
 export const DEFAULT_CONFIG: LmStudioConfig = {
   baseUrl: "http://localhost:1234/v1",
+  // LM Studio default — no auth required by default
   apiKey: "lmstudio",
   providerName: "local",
   contextWindow: 128000,
@@ -128,23 +196,31 @@ export async function fetchLmStudioModels(
   fetchImpl: FetchLike = fetch,
   timeoutMs = DEFAULT_CONFIG.fetchTimeoutMs,
 ): Promise<string[]> {
+  const cleanUrl = baseUrl.replace(/\/+$/, "");
+  log.debug(`fetching models from ${cleanUrl}/models (timeout: ${timeoutMs}ms)`);
+
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetchImpl(`${baseUrl.replace(/\/+$/, "")}/models`, {
+    const start = performance.now();
+    const response = await fetchImpl(`${cleanUrl}/models`, {
       method: "GET",
       signal: controller.signal,
     });
+    const fetchMs = (performance.now() - start).toFixed(2);
+    log.debug(`fetch response received in ${fetchMs}ms (status: ${response.status})`);
 
     if (!response.ok) {
-      throw new Error(`LM Studio model fetch failed: ${response.status} ${response.statusText}`.trim());
+      throw new Error(`model fetch failed: ${response.status} ${response.statusText}`.trim());
     }
 
-    return parseModelsPayload(await response.json());
+    const models = parseModelsPayload(await response.json());
+    log.info(`found ${models.length} model${models.length === 1 ? "" : "s"}`);
+    return models;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`LM Studio model fetch timed out after ${timeoutMs}ms`);
+      throw new Error(`model fetch timed out after ${timeoutMs}ms`);
     }
     throw error;
   } finally {
@@ -177,17 +253,26 @@ export async function refreshProvider(
   fetchModels: (config: LmStudioConfig) => Promise<string[]> = (currentConfig) =>
     fetchLmStudioModels(currentConfig.baseUrl, fetch, currentConfig.fetchTimeoutMs),
 ): Promise<RefreshResult> {
+  const start = performance.now();
+  log.info(`refreshing provider '${config.providerName}' at ${config.baseUrl}`);
+
   try {
     const models = await fetchModels(config);
     if (models.length === 0) {
+      log.warn(`no models found, unregistering provider '${config.providerName}'`);
       pi.unregisterProvider?.(config.providerName);
     } else {
       pi.registerProvider(config.providerName, buildProviderConfig(config, models));
+      const ms = (performance.now() - start).toFixed(2);
+      log.info(`provider '${config.providerName}' registered with ${models.length} model${models.length === 1 ? "" : "s"} in ${ms}ms`);
     }
 
     return { ok: true, count: models.length, models };
   } catch (error) {
-    return { ok: false, error: error instanceof Error ? error.message : String(error) };
+    const ms = (performance.now() - start).toFixed(2);
+    const msg = error instanceof Error ? error.message : String(error);
+    log.error(`refresh failed for '${config.providerName}' after ${ms}ms: ${msg}`);
+    return { ok: false, error: msg };
   }
 }
 
@@ -196,33 +281,39 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
   let lastWarnings: string[] = [];
 
   async function refresh(cwd = process.cwd()): Promise<RefreshResult> {
+    log.debug(`refreshing from cwd: ${cwd}`);
     const loaded = loadConfigFromSettings(cwd);
     lastWarnings = loaded.warnings;
+    if (loaded.warnings.length > 0) {
+      log.debug(`config warnings: ${loaded.warnings.join(", ")}`);
+    }
+    log.debug(`effective config: baseUrl=${loaded.config.baseUrl}, provider=${loaded.config.providerName}, contextWindow=${loaded.config.contextWindow}, maxTokens=${loaded.config.maxTokens}`);
     lastResult = await refreshProvider(pi, loaded.config);
     return lastResult;
   }
 
   lastResult = await refresh();
   if (lastResult.ok) {
-    console.error(`LM Studio: registered ${lastResult.count} local model${lastResult.count === 1 ? "" : "s"}`);
+    log.info(`registered ${lastResult.count} local model${lastResult.count === 1 ? "" : "s"}`);
   } else {
-    console.error(`LM Studio: ${lastResult.error}`);
+    log.error(`initial refresh failed: ${lastResult.error}`);
   }
   for (const warning of lastWarnings) {
-    console.error(`LM Studio: ${warning}`);
+    log.warn(warning);
   }
 
   pi.registerCommand("lmstudio-refresh", {
     description: "Refresh LM Studio local models",
     handler: async (_args, ctx) => {
+      log.info("refresh command invoked");
       const result = await refresh(ctx.cwd);
       for (const warning of lastWarnings) {
-        ctx.ui.notify(`LM Studio: ${warning}`, "warning");
+        ctx.ui.notify(`[lmstudio] ${warning}`, "warning");
       }
       if (result.ok) {
-        ctx.ui.notify(`LM Studio: registered ${result.count} local model${result.count === 1 ? "" : "s"}`, "info");
+        ctx.ui.notify(`[lmstudio] registered ${result.count} local model${result.count === 1 ? "" : "s"}`, "info");
       } else {
-        ctx.ui.notify(`LM Studio refresh failed: ${result.error}`, "warning");
+        ctx.ui.notify(`[lmstudio] refresh failed: ${result.error}`, "warning");
       }
     },
   });
@@ -230,9 +321,10 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
   pi.registerCommand("lmstudio-status", {
     description: "Show LM Studio provider status",
     handler: async (_args, ctx) => {
+      log.info("status command invoked");
       const { config, warnings } = loadConfigFromSettings(ctx.cwd);
       for (const warning of warnings) {
-        ctx.ui.notify(`LM Studio: ${warning}`, "warning");
+        ctx.ui.notify(`[lmstudio] ${warning}`, "warning");
       }
       const status =
         lastResult === undefined
@@ -240,7 +332,7 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
           : lastResult.ok
             ? `${lastResult.count} local model${lastResult.count === 1 ? "" : "s"} registered`
             : `last refresh failed: ${lastResult.error}`;
-      ctx.ui.notify(`LM Studio ${config.baseUrl} (${config.providerName}/): ${status}`, lastResult?.ok === false ? "warning" : "info");
+      ctx.ui.notify(`[lmstudio] ${config.baseUrl} (${config.providerName}/): ${status}`, lastResult?.ok === false ? "warning" : "info");
     },
   });
 }
