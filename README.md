@@ -11,7 +11,7 @@ This repo has been almost entirely written by a local model, [qwen-3.6-35b-a3b-g
 It started with a plan from GPT5.5. From there all code was written by my local model.
 
 ### Specs
-- pi.dev harness, with little-coder
+- pi.dev harness, with [little-coder](https://github.com/itayinbarr/little-coder)
 - RX 7800 XT GPU, 16gb vram
 - 32gb DDR5 system ram
 - Ryzen 5 7600
