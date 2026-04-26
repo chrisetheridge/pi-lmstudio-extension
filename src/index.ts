@@ -8,6 +8,9 @@ export type {
   MetadataSource,
 } from "./types.js";
 
+// Re-export autocomplete types
+export type { AutocompleteItem, CompletionCache } from "./extension/autocomplete.js";
+
 // Re-export public utilities
 export { debugLog, isDebugEnabled } from "./debug.js";
 
@@ -35,3 +38,25 @@ export { buildProviderConfig, refreshProvider } from "./provider.js";
 
 // Re-export the extension entry point
 export { default } from "./extension/index.js";
+
+// Re-export autocomplete functions
+export {
+  createCompletionCache,
+  updateCacheFromDiscoveredModels,
+  updateCacheFromNativeModels,
+  getModelIdCompletions,
+  getLoadedInstanceIdCompletions,
+  getFlagCompletions,
+  parseArgumentPrefix,
+  EMPTY_CACHE,
+} from "./extension/autocomplete.js";
+
+// Re-export command functions
+export {
+  registerCommands,
+  setLastResult,
+  setLastWarnings,
+  getLastDiscoverySource,
+  updateCompletionCacheFromNativeModels,
+  getCompletionCache,
+} from "./extension/commands.js";

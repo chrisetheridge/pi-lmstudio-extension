@@ -9,9 +9,9 @@ export interface LmStudioModelInfo {
   toolUse?: boolean;
   contextWindow?: number;
   maxTokens?: number;
-  loaded: boolean;
+  loaded?: boolean;
   loadedInstanceIds: string[];
-  source: "openai" | "native";
+  source?: "openai" | "native";
 }
 
 export type MetadataSource = "auto" | "openai" | "native";

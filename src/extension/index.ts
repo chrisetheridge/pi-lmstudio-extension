@@ -4,8 +4,8 @@ import { configureDebugLogging } from "../debug.js";
 import { loadConfigFromSettings } from "../config/load.js";
 import { refreshProvider } from "../provider.js";
 import { fetchLmStudioModelInfo } from "../models/fetch.js";
-import { registerCommands, setLastResult, setLastWarnings } from "./commands.js";
-import type { RefreshResult } from "../types.js";
+import { registerCommands, setLastResult, setLastWarnings, updateCompletionCacheFromNativeModels } from "./commands.js";
+import type { RefreshResult, LmStudioModelInfo } from "../types.js";
 
 export default async function lmStudioExtension(pi: ExtensionAPI) {
   let lastResult: RefreshResult | undefined;
@@ -28,6 +28,11 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
     }
     log.debug(`effective config: baseUrl=${loaded.config.baseUrl}, provider=${loaded.config.providerName}, contextWindow=${loaded.config.contextWindow}, maxTokens=${loaded.config.maxTokens}`);
     setLastWarnings(loaded.warnings);
+    // Fetch model info to update completion cache for native models
+    const modelInfoResult = await fetchLmStudioModelInfo(loaded.config, fetch);
+    if (modelInfoResult.source === "native") {
+      updateCompletionCacheFromNativeModels(modelInfoResult.models);
+    }
     const result = await refreshProvider(pi, loaded.config);
     lastResult = result;
     setLastResult(result);

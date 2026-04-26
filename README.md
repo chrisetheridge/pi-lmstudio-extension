@@ -92,6 +92,18 @@ If you want `studio/<model-id>` instead of `local/<model-id>`, set:
 - `/lmstudio-refresh` fetches the model list again and re-registers the provider
 - `/lmstudio-status` shows the configured endpoint and the result of the last refresh
 
+### Autocomplete
+
+The extension provides argument completions for commands:
+
+- **Model ID completions**: When typing a command that accepts a model name (e.g., future `/lmstudio-load <model>`), Pi will suggest matching model IDs from the cached discovery results. Native models appear first when loaded state is known.
+- **Instance ID completions**: Commands accepting instance IDs (e.g., future `/lmstudio-unload <instance-id>`) will suggest loaded instances from native model metadata.
+- **Flag completions**: When typing `--` after a command, supported flags like `--context-length`, `--flash-attention`, etc. are suggested. Boolean flags like `--flash-attention` further suggest `true`/`false`.
+
+Completions are based on cached data from the last refresh or model list operation. They return instantly without network requests.
+
+If completions appear stale, run `/lmstudio-refresh` to update the cache.
+
 ## Behavior
 
 - If LM Studio is offline, Pi still starts
