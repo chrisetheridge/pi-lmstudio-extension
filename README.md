@@ -9,6 +9,7 @@ By default, the extension exposes discovered models as `local/<model-id>`, so a 
 - Fetches `GET <baseUrl>/models` from LM Studio
 - Registers the returned model IDs in Pi without editing `models.json`
 - Refreshes the model list on startup and through a manual command
+- Keeps Pi usable even when LM Studio is offline during startup
 - Keeps the LM Studio-specific config isolated from other Pi providers
 
 ## Installation
@@ -91,14 +92,19 @@ If you want `studio/<model-id>` instead of `local/<model-id>`, set:
 
 - `/lmstudio-refresh` fetches the model list again and re-registers the provider
 - `/lmstudio-status` shows the configured endpoint and the result of the last refresh
+- `/lmstudio-models` lists all available models from LM Studio's native API
+- `/lmstudio-loaded` lists only loaded model instances from LM Studio's native API
+- `/lmstudio-load <model> [options]` loads a model, then refreshes Pi registration
+- `/lmstudio-unload <instance-id>` unloads a model instance, then refreshes Pi registration
 
 ### Autocomplete
 
 The extension provides argument completions for commands:
 
-- **Model ID completions**: When typing a command that accepts a model name (e.g., future `/lmstudio-load <model>`), Pi will suggest matching model IDs from the cached discovery results. Native models appear first when loaded state is known.
-- **Instance ID completions**: Commands accepting instance IDs (e.g., future `/lmstudio-unload <instance-id>`) will suggest loaded instances from native model metadata.
+- **Model ID completions**: `/lmstudio-load` suggests matching model IDs from cached discovery results. Native models appear first when loaded state is known.
+- **Instance ID completions**: `/lmstudio-unload` suggests loaded instances from native model metadata.
 - **Flag completions**: When typing `--` after a command, supported flags like `--context-length`, `--flash-attention`, etc. are suggested. Boolean flags like `--flash-attention` further suggest `true`/`false`.
+- `/lmstudio-load` switches between model suggestions before the first space and flag suggestions after the model name.
 
 Completions are based on cached data from the last refresh or model list operation. They return instantly without network requests.
 
@@ -108,6 +114,8 @@ If completions appear stale, run `/lmstudio-refresh` to update the cache.
 
 - If LM Studio is offline, Pi still starts
 - If discovery fails, the extension keeps the app usable and reports the error
+- Startup discovery runs in the background so LM Studio availability does not block Pi launch
+- `/lmstudio-load`, `/lmstudio-unload`, and `/lmstudio-loaded` wait for their native API calls to finish before returning
 - If no models are returned, the provider is unregistered until the next successful refresh
 - The extension does not write to `~/.pi/agent/models.json`
 
