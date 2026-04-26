@@ -52,6 +52,9 @@ function coercePartialConfig(value: Record<string, unknown>): Partial<LmStudioCo
   }
   if (typeof value.nativeBaseUrl === "string") config.nativeBaseUrl = value.nativeBaseUrl;
   if (typeof value.includeEmbeddingModels === "boolean") config.includeEmbeddingModels = value.includeEmbeddingModels;
+  if (typeof value.modelManagementTimeoutMs === "number" && Number.isFinite(value.modelManagementTimeoutMs) && value.modelManagementTimeoutMs > 0) {
+    config.modelManagementTimeoutMs = value.modelManagementTimeoutMs;
+  }
 
   return config;
 }

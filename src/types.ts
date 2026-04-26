@@ -28,6 +28,31 @@ export interface LmStudioConfig {
   modelMetadataSource: MetadataSource;
   nativeBaseUrl?: string;
   includeEmbeddingModels: boolean;
+  modelManagementTimeoutMs: number;
+}
+
+/** Arguments for the /lmstudio-load command */
+export interface LoadModelCommandArgs {
+  model: string;
+  contextLength?: number;
+  flashAttention?: boolean;
+  evalBatchSize?: number;
+  numExperts?: number;
+  offloadKvCacheToGpu?: boolean;
+}
+
+/** Result from a successful model load */
+export interface LoadModelResult {
+  type: string;
+  instance_id: string;
+  load_time_seconds: number;
+  status: string;
+  load_config?: Record<string, unknown>;
+}
+
+/** Result from a successful model unload */
+export interface UnloadModelResult {
+  instance_id: string;
 }
 
 export interface LoadedConfig {
@@ -40,11 +65,11 @@ export type RefreshResult =
   | { ok: true; count: number; models: string[]; source: "openai" | "native" }
   | { ok: false; error: string };
 
-type FetchLike = typeof fetch;
+export type FetchLike = typeof fetch;
 
 interface RefreshProviderApi {
   registerProvider(name: string, config: import("@mariozechner/pi-coding-agent").ProviderConfig): void;
   unregisterProvider?(name: string): void;
 }
 
-export { FetchLike, RefreshProviderApi };
+export { RefreshProviderApi };

@@ -13,6 +13,7 @@ export const DEFAULT_CONFIG: LmStudioConfig = {
   modelMetadataSource: "auto",
   nativeBaseUrl: "http://localhost:1234/api/v1",
   includeEmbeddingModels: false,
+  modelManagementTimeoutMs: 120000,
 };
 
 const ZERO_COST = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 };

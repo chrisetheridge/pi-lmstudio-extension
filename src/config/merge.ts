@@ -22,6 +22,10 @@ export function mergeConfig(
     contextWindow: positiveNumberOrDefault(merged.contextWindow, DEFAULT_CONFIG.contextWindow),
     maxTokens: positiveNumberOrDefault(merged.maxTokens, DEFAULT_CONFIG.maxTokens),
     fetchTimeoutMs: positiveNumberOrDefault(merged.fetchTimeoutMs, DEFAULT_CONFIG.fetchTimeoutMs),
+    modelManagementTimeoutMs: positiveNumberOrDefault(
+      merged.modelManagementTimeoutMs,
+      DEFAULT_CONFIG.modelManagementTimeoutMs,
+    ),
     input: merged.input.length > 0 ? merged.input : DEFAULT_CONFIG.input,
     modelMetadataSource: (merged.modelMetadataSource === "auto" || merged.modelMetadataSource === "openai" || merged.modelMetadataSource === "native")
       ? merged.modelMetadataSource

@@ -6,6 +6,9 @@ export type {
   RefreshResult,
   ModelInput,
   MetadataSource,
+  LoadModelCommandArgs,
+  LoadModelResult,
+  UnloadModelResult,
 } from "./types.js";
 
 // Re-export autocomplete types
@@ -31,7 +34,10 @@ export {
   fetchOpenAiModels,
   fetchNativeModels,
   fetchLmStudioModelInfo,
+  loadLmStudioModel,
+  unloadLmStudioModel,
 } from "./models/fetch.js";
+export { parseLoadArgs, parseBooleanArg } from "./models/load-args.js";
 
 // Re-export public provider functions
 export { buildProviderConfig, refreshProvider } from "./provider.js";

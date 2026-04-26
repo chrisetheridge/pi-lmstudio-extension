@@ -20,6 +20,12 @@ import {
   getFlagCompletions,
   parseArgumentPrefix,
   EMPTY_CACHE,
+  deriveNativeBaseUrl,
+  loadLmStudioModel,
+  unloadLmStudioModel,
+  parseLoadArgs,
+  parseBooleanArg,
+  parseNativeModelsPayload,
   type LmStudioModelInfo,
   type LmStudioConfig,
 } from "../src/index.js";
@@ -45,6 +51,31 @@ const rawModel = (id: string): LmStudioModelInfo => ({
   loadedInstanceIds: [],
   source: "openai",
 });
+
+type FetchInput = Parameters<typeof fetch>[0];
+type FetchInit = Parameters<typeof fetch>[1];
+
+function createAbortableFetchMock() {
+  return vi.fn((_: FetchInput, init?: FetchInit) => {
+    const signal = init?.signal;
+    return new Promise<Response>((_resolve, reject) => {
+      const abortError = () => new DOMException("The operation was aborted.", "AbortError");
+
+      if (signal?.aborted) {
+        reject(abortError());
+        return;
+      }
+
+      signal?.addEventListener(
+        "abort",
+        () => {
+          reject(abortError());
+        },
+        { once: true },
+      );
+    });
+  });
+}
 
 describe("mergeConfig", () => {
   it("uses defaults when settings are missing", () => {
@@ -122,6 +153,290 @@ describe("loadConfigFromSettings", () => {
 
     expect(loaded.config).toEqual(DEFAULT_CONFIG);
     expect(loaded.warnings[0]).toContain("Could not parse");
+  });
+});
+
+describe("parseBooleanArg", () => {
+  it("returns true for truthy values", () => {
+    expect(parseBooleanArg("true")).toBe(true);
+    expect(parseBooleanArg("True")).toBe(true);
+    expect(parseBooleanArg("TRUE")).toBe(true);
+    expect(parseBooleanArg("1")).toBe(true);
+    expect(parseBooleanArg("yes")).toBe(true);
+    expect(parseBooleanArg("Yes")).toBe(true);
+  });
+
+  it("returns false for falsy values", () => {
+    expect(parseBooleanArg("false")).toBe(false);
+    expect(parseBooleanArg("False")).toBe(false);
+    expect(parseBooleanArg("0")).toBe(false);
+    expect(parseBooleanArg("no")).toBe(false);
+    expect(parseBooleanArg("No")).toBe(false);
+  });
+
+  it("returns undefined for unrecognized values", () => {
+    expect(parseBooleanArg("maybe")).toBeUndefined();
+    expect(parseBooleanArg("2")).toBeUndefined();
+    expect(parseBooleanArg("")).toBeUndefined();
+    expect(parseBooleanArg("yesno")).toBeUndefined();
+  });
+
+  it("trims whitespace before parsing", () => {
+    expect(parseBooleanArg("  true  ")).toBe(true);
+    expect(parseBooleanArg("  false  ")).toBe(false);
+  });
+});
+
+describe("parseLoadArgs", () => {
+  it("parses a bare model key", () => {
+    expect(parseLoadArgs("qwen3.6-35b")).toEqual({ model: "qwen3.6-35b" });
+  });
+
+  it("parses model key with context-length", () => {
+    expect(parseLoadArgs("qwen3.6-35b --context-length 4096")).toEqual({
+      model: "qwen3.6-35b",
+      contextLength: 4096,
+    });
+  });
+
+  it("parses model key with flash-attention true", () => {
+    expect(parseLoadArgs("qwen3.6-35b --flash-attention true")).toEqual({
+      model: "qwen3.6-35b",
+      flashAttention: true,
+    });
+  });
+
+  it("parses model key with flash-attention false", () => {
+    expect(parseLoadArgs("qwen3.6-35b --flash-attention false")).toEqual({
+      model: "qwen3.6-35b",
+      flashAttention: false,
+    });
+  });
+
+  it("defaults flash-attention to true when no value", () => {
+    expect(parseLoadArgs("qwen3.6-35b --flash-attention")).toEqual({
+      model: "qwen3.6-35b",
+      flashAttention: true,
+    });
+  });
+
+  it("parses all supported flags", () => {
+    const result = parseLoadArgs(
+      "qwen3.6-35b --context-length 8192 --flash-attention true --eval-batch-size 32 --num-experts 4 --offload-kv-cache-to-gpu true",
+    );
+    expect(result).toEqual({
+      model: "qwen3.6-35b",
+      contextLength: 8192,
+      flashAttention: true,
+      evalBatchSize: 32,
+      numExperts: 4,
+      offloadKvCacheToGpu: true,
+    });
+  });
+
+  it("rejects non-positive context-length", () => {
+    expect(() => parseLoadArgs("model --context-length 0")).toThrow("expected a positive integer");
+    expect(() => parseLoadArgs("model --context-length -1")).toThrow("expected a positive integer");
+    expect(() => parseLoadArgs("model --context-length abc")).toThrow("expected a positive integer");
+  });
+
+  it("rejects non-positive eval-batch-size", () => {
+    expect(() => parseLoadArgs("model --eval-batch-size 0")).toThrow("expected a positive integer");
+  });
+
+  it("rejects non-positive num-experts", () => {
+    expect(() => parseLoadArgs("model --num-experts -5")).toThrow("expected a positive integer");
+  });
+
+  it("rejects invalid boolean for flash-attention", () => {
+    expect(() => parseLoadArgs("model --flash-attention maybe")).toThrow("expects true or false");
+  });
+
+  it("rejects invalid boolean for offload-kv-cache-to-gpu", () => {
+    expect(() => parseLoadArgs("model --offload-kv-cache-to-gpu maybe")).toThrow("expects true or false");
+  });
+
+  it("rejects unknown flags", () => {
+    expect(() => parseLoadArgs("model --unknown-flag value")).toThrow("unknown flag");
+  });
+
+  it("rejects unexpected positional arguments after model key", () => {
+    expect(() => parseLoadArgs("model extra")).toThrow("unexpected argument");
+  });
+
+  it("rejects empty args", () => {
+    expect(() => parseLoadArgs("")).toThrow("model key is required");
+    expect(() => parseLoadArgs("   ")).toThrow("model key is required");
+  });
+
+  it("rejects flag without value for context-length", () => {
+    expect(() => parseLoadArgs("model --context-length")).toThrow("requires a positive integer");
+  });
+
+  it("rejects flag without value for eval-batch-size", () => {
+    expect(() => parseLoadArgs("model --eval-batch-size")).toThrow("requires a positive integer");
+  });
+
+  it("rejects flag without value for num-experts", () => {
+    expect(() => parseLoadArgs("model --num-experts")).toThrow("requires a positive integer");
+  });
+
+  it("parses model key with slash", () => {
+    expect(parseLoadArgs("unsloth/qwen3.6-35b-a3b")).toEqual({ model: "unsloth/qwen3.6-35b-a3b" });
+  });
+});
+
+describe("deriveNativeBaseUrl", () => {
+  it("replaces trailing /v1 with /api/v1", () => {
+    expect(deriveNativeBaseUrl("http://localhost:1234/v1")).toBe("http://localhost:1234/api/v1");
+  });
+
+  it("appends /api/v1 when no /v1 suffix", () => {
+    expect(deriveNativeBaseUrl("http://localhost:1234")).toBe("http://localhost:1234/api/v1");
+  });
+
+  it("strips trailing slashes before deriving", () => {
+    expect(deriveNativeBaseUrl("http://localhost:1234/v1///")).toBe("http://localhost:1234/api/v1");
+  });
+
+  it("handles IP-based URLs", () => {
+    expect(deriveNativeBaseUrl("http://192.168.2.88:1234/v1")).toBe("http://192.168.2.88:1234/api/v1");
+  });
+
+  it("handles HTTPS URLs", () => {
+    expect(deriveNativeBaseUrl("https://example.com/v1")).toBe("https://example.com/api/v1");
+  });
+});
+
+describe("parseNativeModelsPayload", () => {
+  it("parses current LM Studio native models responses with a models array", async () => {
+    const { parseNativeModelsPayload } = await import("../src/index.js");
+
+    expect(
+      parseNativeModelsPayload({
+        models: [
+          {
+            type: "llm",
+            key: "unsloth/qwen3.6-35b-a3b",
+            display_name: "Qwen3.6 35B A3B UD",
+            max_context_length: 262144,
+            loaded_instances: [
+              {
+                id: "unsloth/qwen3.6-35b-a3b",
+                config: {
+                  context_length: 64213,
+                },
+              },
+            ],
+            capabilities: {
+              vision: true,
+              trained_for_tool_use: true,
+            },
+          },
+        ],
+      }),
+    ).toEqual([
+      expect.objectContaining({
+        id: "unsloth/qwen3.6-35b-a3b",
+        name: "Qwen3.6 35B A3B UD",
+        input: ["text", "image"],
+        loaded: true,
+        loadedInstanceIds: ["unsloth/qwen3.6-35b-a3b"],
+        contextWindow: 64213,
+      }),
+    ]);
+  });
+
+  it("parses models without loaded instances", () => {
+    const result = parseNativeModelsPayload({
+      models: [
+        {
+          type: "llm",
+          key: "unloaded-model",
+          display_name: "Unloaded Model",
+          max_context_length: 131072,
+          loaded_instances: [],
+        },
+      ],
+    });
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        id: "unloaded-model",
+        name: "Unloaded Model",
+        loaded: false,
+        loadedInstanceIds: [],
+      }),
+    ]);
+  });
+
+  it("parses models with vision capability", () => {
+    const result = parseNativeModelsPayload({
+      models: [
+        {
+          type: "llm",
+          key: "vision-model",
+          display_name: "Vision Model",
+          max_context_length: 4096,
+          loaded_instances: [],
+          capabilities: {
+            vision: true,
+            trained_for_tool_use: false,
+          },
+        },
+      ],
+    });
+
+    expect(result[0].input).toContain("image");
+  });
+
+  it("parses models with tool-use capability", () => {
+    const result = parseNativeModelsPayload({
+      models: [
+        {
+          type: "llm",
+          key: "tool-model",
+          display_name: "Tool Model",
+          max_context_length: 4096,
+          loaded_instances: [],
+          capabilities: {
+            vision: false,
+            trained_for_tool_use: true,
+          },
+        },
+      ],
+    });
+
+    expect(result[0].toolUse).toBe(true);
+  });
+
+  it("parses models without capabilities", () => {
+    const result = parseNativeModelsPayload({
+      models: [
+        {
+          type: "llm",
+          key: "basic-model",
+          display_name: "Basic Model",
+          max_context_length: 4096,
+          loaded_instances: [],
+        },
+      ],
+    });
+
+    expect(result[0].input).toEqual(["text"]);
+    expect(result[0].toolUse).toBeUndefined();
+  });
+
+  it("returns empty array for empty data array", () => {
+    expect(parseNativeModelsPayload({ data: [] })).toEqual([]);
+  });
+
+  it("returns empty array for empty models array", () => {
+    expect(parseNativeModelsPayload({ models: [] })).toEqual([]);
+  });
+
+  it("throws on non-object response", () => {
+    expect(() => parseNativeModelsPayload(null as never)).toThrow("Expected native /api/v1/models response with a data or models array");
   });
 });
 
@@ -237,6 +552,287 @@ describe("fetchNativeModels", () => {
       expect.objectContaining({ id: "native-model" }),
     ]);
     expect(fetchImpl).toHaveBeenCalledWith("http://192.168.2.88:1234/api/v1/models", expect.objectContaining({ method: "GET" }));
+  });
+
+  it("uses modelManagementTimeoutMs for timeout", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ models: [] })));
+
+    await fetchNativeModels(
+      mergeConfig({ baseUrl: "http://localhost:1234/v1", modelManagementTimeoutMs: 300000 }),
+      fetchImpl,
+    );
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://localhost:1234/api/v1/models",
+      expect.objectContaining({ method: "GET" }),
+    );
+  });
+
+  it("throws on non-OK response", async () => {
+    const fetchImpl = vi.fn(async () => new Response("not found", { status: 404, statusText: "Not Found" }));
+
+    await expect(
+      fetchNativeModels(mergeConfig({ baseUrl: "http://localhost:1234/v1" }), fetchImpl),
+    ).rejects.toThrow("native model fetch failed: 404 Not Found");
+  });
+
+  it("throws on timeout", async () => {
+    const fetchImpl = createAbortableFetchMock();
+
+    await expect(
+      fetchNativeModels(
+        mergeConfig({ baseUrl: "http://localhost:1234/v1", modelManagementTimeoutMs: 50 }),
+        fetchImpl,
+      ),
+    ).rejects.toThrow("native model fetch timed out after 50ms");
+  }, 1000);
+
+  it("sends auth header when apiKey is set", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ models: [] })));
+
+    await fetchNativeModels(
+      mergeConfig({ baseUrl: "http://localhost:1234/v1", apiKey: "secret-key" }),
+      fetchImpl,
+    );
+
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://localhost:1234/api/v1/models",
+      expect.objectContaining({
+        method: "GET",
+      }),
+    );
+  });
+
+  it("uses explicit nativeBaseUrl when provided", async () => {
+    const fetchImpl = vi.fn(async () => new Response(JSON.stringify({ models: [] })));
+
+    await fetchNativeModels(
+      mergeConfig({ baseUrl: "http://localhost:1234/v1", nativeBaseUrl: "http://custom:9999/api/v1" }),
+      fetchImpl,
+    );
+
+    expect(fetchImpl).toHaveBeenCalledWith("http://custom:9999/api/v1/models", expect.any(Object));
+  });
+});
+
+describe("loadLmStudioModel", () => {
+  it("sends correct request body with model key only", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ type: "llm", instance_id: "inst-1", load_time_seconds: 2.5, status: "success" })),
+    );
+
+    const result = await loadLmStudioModel(
+      mergeConfig({ baseUrl: "http://localhost:1234/v1" }),
+      { model: "qwen3.6-35b" },
+      fetchImpl,
+    );
+
+    expect(result.instance_id).toBe("inst-1");
+    expect(result.load_time_seconds).toBe(2.5);
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://localhost:1234/api/v1/models/load",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ model: "qwen3.6-35b", echo_load_config: true }),
+      }),
+    );
+  });
+
+  it("sends optional load settings in request body", async () => {
+    let callArgs: FetchInit | undefined;
+    const fetchImpl = vi.fn(async (_input: FetchInput, init?: FetchInit) => {
+      callArgs = init;
+      return new Response(JSON.stringify({ type: "llm", instance_id: "inst-2", load_time_seconds: 3.1, status: "success" }));
+    });
+
+    await loadLmStudioModel(
+      mergeConfig({ baseUrl: "http://localhost:1234/v1" }),
+      {
+        model: "qwen3.6-35b",
+        contextLength: 8192,
+        flashAttention: true,
+        evalBatchSize: 32,
+        numExperts: 4,
+        offloadKvCacheToGpu: true,
+      },
+      fetchImpl,
+    );
+
+    expect(callArgs).toBeDefined();
+    const requestInit = callArgs as RequestInit;
+    const body = JSON.parse(requestInit.body as string);
+    expect(body).toEqual({
+      model: "qwen3.6-35b",
+      echo_load_config: true,
+      context_length: 8192,
+      flash_attention: true,
+      eval_batch_size: 32,
+      num_experts: 4,
+      offload_kv_cache_to_gpu: true,
+    });
+  });
+
+  it("uses modelManagementTimeoutMs for timeout", async () => {
+    const fetchImpl = createAbortableFetchMock();
+
+    await expect(
+      loadLmStudioModel(
+        mergeConfig({ baseUrl: "http://localhost:1234/v1", modelManagementTimeoutMs: 100 }),
+        { model: "qwen3.6-35b" },
+        fetchImpl,
+      ),
+    ).rejects.toThrow("model load timed out after 100ms");
+  }, 1000);
+
+  it("throws on non-OK response", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response("model not found", { status: 404, statusText: "Not Found" }),
+    );
+
+    await expect(
+      loadLmStudioModel(mergeConfig({ baseUrl: "http://localhost:1234/v1" }), { model: "nonexistent" }, fetchImpl),
+    ).rejects.toThrow("model load failed: 404 Not Found");
+  });
+
+  it("includes error body in message", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response('{"error": "model not found"}', { status: 404, statusText: "Not Found" }),
+    );
+
+    await expect(
+      loadLmStudioModel(mergeConfig({ baseUrl: "http://localhost:1234/v1" }), { model: "nonexistent" }, fetchImpl),
+    ).rejects.toThrow("model load failed: 404 Not Found");
+  });
+
+  it("sends auth header when apiKey is set", async () => {
+    let callArgs: FetchInit | undefined;
+    const fetchImpl = vi.fn(async (_input: FetchInput, init?: FetchInit) => {
+      callArgs = init;
+      return new Response(JSON.stringify({ type: "llm", instance_id: "inst-1", load_time_seconds: 1.0, status: "success" }));
+    });
+
+    await loadLmStudioModel(
+      mergeConfig({ baseUrl: "http://localhost:1234/v1", apiKey: "secret" }),
+      { model: "qwen3.6-35b" },
+      fetchImpl,
+    );
+
+    expect(callArgs).toBeDefined();
+    expect((callArgs as RequestInit).headers).toMatchObject({ Authorization: "Bearer lm" });
+  });
+
+  it("uses explicit nativeBaseUrl when provided", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ type: "llm", instance_id: "inst-1", load_time_seconds: 1.0, status: "success" })),
+    );
+
+    await loadLmStudioModel(
+      mergeConfig({ baseUrl: "http://localhost:1234/v1", nativeBaseUrl: "http://custom:9999/api/v1" }),
+      { model: "qwen3.6-35b" },
+      fetchImpl,
+    );
+
+    expect(fetchImpl).toHaveBeenCalledWith("http://custom:9999/api/v1/models/load", expect.any(Object));
+  });
+
+  it("parses load_config from response", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          type: "llm",
+          instance_id: "inst-1",
+          load_time_seconds: 2.0,
+          status: "success",
+          load_config: { context_length: 4096, flash_attention: true },
+        }),
+      ),
+    );
+
+    const result = await loadLmStudioModel(
+      mergeConfig({ baseUrl: "http://localhost:1234/v1" }),
+      { model: "qwen3.6-35b" },
+      fetchImpl,
+    );
+
+    expect(result.load_config).toEqual({ context_length: 4096, flash_attention: true });
+  });
+});
+
+describe("unloadLmStudioModel", () => {
+  it("sends correct request body with instance_id", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ instance_id: "inst-1" })),
+    );
+
+    const result = await unloadLmStudioModel(
+      mergeConfig({ baseUrl: "http://localhost:1234/v1" }),
+      "inst-1",
+      fetchImpl,
+    );
+
+    expect(result.instance_id).toBe("inst-1");
+    expect(fetchImpl).toHaveBeenCalledWith(
+      "http://localhost:1234/api/v1/models/unload",
+      expect.objectContaining({
+        method: "POST",
+        headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ instance_id: "inst-1" }),
+      }),
+    );
+  });
+
+  it("uses modelManagementTimeoutMs for timeout", async () => {
+    const fetchImpl = createAbortableFetchMock();
+
+    await expect(
+      unloadLmStudioModel(
+        mergeConfig({ baseUrl: "http://localhost:1234/v1", modelManagementTimeoutMs: 100 }),
+        "inst-1",
+        fetchImpl,
+      ),
+    ).rejects.toThrow("model unload timed out after 100ms");
+  }, 1000);
+
+  it("throws on non-OK response", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response("instance not found", { status: 404, statusText: "Not Found" }),
+    );
+
+    await expect(
+      unloadLmStudioModel(mergeConfig({ baseUrl: "http://localhost:1234/v1" }), "nonexistent", fetchImpl),
+    ).rejects.toThrow("model unload failed: 404 Not Found");
+  });
+
+  it("sends auth header when apiKey is set", async () => {
+    let callArgs: FetchInit | undefined;
+    const fetchImpl = vi.fn(async (_input: FetchInput, init?: FetchInit) => {
+      callArgs = init;
+      return new Response(JSON.stringify({ instance_id: "inst-1" }));
+    });
+
+    await unloadLmStudioModel(
+      mergeConfig({ baseUrl: "http://localhost:1234/v1", apiKey: "secret" }),
+      "inst-1",
+      fetchImpl,
+    );
+
+    expect(callArgs).toBeDefined();
+    expect((callArgs as RequestInit).headers).toMatchObject({ Authorization: "Bearer lm" });
+  });
+
+  it("uses explicit nativeBaseUrl when provided", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ instance_id: "inst-1" })),
+    );
+
+    await unloadLmStudioModel(
+      mergeConfig({ baseUrl: "http://localhost:1234/v1", nativeBaseUrl: "http://custom:9999/api/v1" }),
+      "inst-1",
+      fetchImpl,
+    );
+
+    expect(fetchImpl).toHaveBeenCalledWith("http://custom:9999/api/v1/models/unload", expect.any(Object));
   });
 });
 
