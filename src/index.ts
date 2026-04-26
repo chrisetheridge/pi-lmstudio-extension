@@ -53,6 +53,7 @@ export {
   getModelIdCompletions,
   getLoadedInstanceIdCompletions,
   getFlagCompletions,
+  getLoadArgumentCompletions,
   parseArgumentPrefix,
   EMPTY_CACHE,
 } from "./extension/autocomplete.js";

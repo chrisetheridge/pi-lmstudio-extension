@@ -15,6 +15,7 @@ import {
   getModelIdCompletions,
   getLoadedInstanceIdCompletions,
   getFlagCompletions,
+  getLoadArgumentCompletions,
   parseArgumentPrefix,
   type CompletionCache,
 } from "./autocomplete.js";
@@ -182,6 +183,7 @@ export function registerCommands(pi: ExtensionAPI, refresh: (cwd?: string) => Pr
   // /lmstudio-load <model> [options]
   pi.registerCommand("lmstudio-load", {
     description: "Load a model via the LM Studio native API",
+    getArgumentCompletions: (argumentPrefix) => getLoadArgumentCompletions(completionCache, argumentPrefix),
     handler: async (args, ctx) => {
       debugLog("load command invoked", args);
       const { config, warnings } = loadConfigFromSettings(ctx.cwd);

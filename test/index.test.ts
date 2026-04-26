@@ -18,6 +18,7 @@ import {
   getModelIdCompletions,
   getLoadedInstanceIdCompletions,
   getFlagCompletions,
+  getLoadArgumentCompletions,
   parseArgumentPrefix,
   EMPTY_CACHE,
   deriveNativeBaseUrl,
@@ -1220,6 +1221,27 @@ describe("autocomplete helpers", () => {
     it("limits results to maxResults", () => {
       const completions = getFlagCompletions("", 2)!;
       expect(completions).toHaveLength(2);
+    });
+  });
+
+  describe("getLoadArgumentCompletions", () => {
+    it("suggests model IDs before first space", () => {
+      const cache = updateCacheFromDiscoveredModels(createCompletionCache(), ["qwen3.6-35b", "llama-3.2"]);
+      const completions = getLoadArgumentCompletions(cache, "qw")!;
+      expect(completions.map((item) => item.value)).toContain("qwen3.6-35b");
+    });
+
+    it("suggests flags after model name", () => {
+      const cache = updateCacheFromDiscoveredModels(createCompletionCache(), ["qwen3.6-35b"]);
+      const completions = getLoadArgumentCompletions(cache, "qwen3.6-35b ")!;
+      expect(completions.map((item) => item.value)).toContain("--context-length");
+      expect(completions.map((item) => item.value)).toContain("--flash-attention");
+    });
+
+    it("suggests boolean values after flash-attention", () => {
+      const cache = updateCacheFromDiscoveredModels(createCompletionCache(), ["qwen3.6-35b"]);
+      const completions = getLoadArgumentCompletions(cache, "qwen3.6-35b --flash-attention ")!;
+      expect(completions.map((item) => item.value)).toEqual(["true", "false"]);
     });
   });
 

@@ -229,6 +229,42 @@ export function getFlagCompletions(
 }
 
 /**
+ * Get argument completions for /lmstudio-load.
+ * Models are suggested before the first space; flags are suggested after.
+ */
+export function getLoadArgumentCompletions(
+  cache: CompletionCache,
+  argumentPrefix: string,
+): AutocompleteItem[] | null {
+  const trimmedLeading = argumentPrefix.replace(/^\s+/, "");
+  if (!trimmedLeading) {
+    return getModelIdCompletions(cache, "");
+  }
+
+  const endsWithSpace = /\s$/.test(argumentPrefix);
+  const tokens = trimmedLeading.split(/\s+/).filter((token) => token.length > 0);
+  if (tokens.length === 1 && !endsWithSpace) {
+    return getModelIdCompletions(cache, tokens[0]);
+  }
+
+  const lastToken = tokens[tokens.length - 1] ?? "";
+  const penultimateToken = tokens[tokens.length - 2] ?? "";
+
+  if (lastToken === "--flash-attention" || penultimateToken === "--flash-attention") {
+    return [
+      { value: "true", label: "true", description: "enable option" },
+      { value: "false", label: "false", description: "disable option" },
+    ];
+  }
+
+  if (lastToken.startsWith("--") || argumentPrefix.endsWith(" ")) {
+    return getFlagCompletions(lastToken.startsWith("--") ? lastToken : "");
+  }
+
+  return null;
+}
+
+/**
  * Parse argument prefix to determine what kind of completion is needed
  * Returns { type, prefix } where type is 'model' | 'instance' | 'flag' | 'boolean'
  */
