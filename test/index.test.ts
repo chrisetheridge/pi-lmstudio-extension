@@ -52,6 +52,8 @@ const rawModel = (id: string): LmStudioModelInfo => ({
   source: "openai",
 });
 
+const flushAsync = () => new Promise((resolve) => setTimeout(resolve, 0));
+
 type FetchInput = Parameters<typeof fetch>[0];
 type FetchInit = Parameters<typeof fetch>[1];
 
@@ -899,12 +901,38 @@ describe("lmStudioExtension", () => {
 
     await lmStudioExtension(pi as never);
 
+    await flushAsync();
     expect(pi.registerProvider).toHaveBeenCalledWith(
       "local",
       expect.objectContaining({
         models: [expect.objectContaining({ id: "startup-model" })],
       }),
     );
+  });
+
+  it("does not fail load when LM Studio is unavailable", async () => {
+    vi.resetModules();
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      throw new Error("connection refused");
+    }));
+    const root = join(tmpdir(), `pi-extension-lmstudio-extension-${crypto.randomUUID()}`);
+    const agentDir = join(root, "agent");
+    mkdirSync(agentDir, { recursive: true });
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+
+    const { default: lmStudioExtension } = await import("../src/index.js");
+    const pi = {
+      registerFlag: vi.fn(),
+      getFlag: vi.fn(),
+      on: vi.fn(),
+      registerProvider: vi.fn(),
+      unregisterProvider: vi.fn(),
+      registerCommand: vi.fn(),
+    };
+
+    await expect(lmStudioExtension(pi as never)).resolves.toBeUndefined();
+    await flushAsync();
+    expect(pi.registerProvider).not.toHaveBeenCalled();
   });
 
   it("resolves the debug flag on session_start after CLI flags are available", async () => {
