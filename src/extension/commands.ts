@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { log } from "../debug.js";
+import { debugLog, log } from "../debug.js";
 import { loadConfigFromSettings } from "../config/load.js";
 import {
   fetchNativeModels,
@@ -78,11 +78,11 @@ async function refreshAfterOperation(
   try {
     const result = await refresh(ctx.cwd);
     if (result.ok) {
-      log.info(`provider refreshed after operation (${result.count} models)`);
+      debugLog(`provider refreshed after operation (${result.count} models)`);
     }
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
-    log.warn(`refresh after operation failed: ${msg}`);
+    debugLog(`refresh after operation failed: ${msg}`);
   }
 }
 
@@ -90,7 +90,7 @@ export function registerCommands(pi: ExtensionAPI, refresh: (cwd?: string) => Pr
   pi.registerCommand("lmstudio-refresh", {
     description: "Refresh LM Studio local models",
     handler: async (_args, ctx) => {
-      log.info("refresh command invoked");
+      debugLog("refresh command invoked");
       const result = await refresh(ctx.cwd);
       for (const warning of lastWarnings) {
         ctx.ui.notify(`[lmstudio] ${warning}`, "warning");
@@ -111,7 +111,7 @@ export function registerCommands(pi: ExtensionAPI, refresh: (cwd?: string) => Pr
   pi.registerCommand("lmstudio-status", {
     description: "Show LM Studio provider status",
     handler: async (_args, ctx) => {
-      log.info("status command invoked");
+      debugLog("status command invoked");
       const { config, warnings } = loadConfigFromSettings(ctx.cwd);
       for (const warning of warnings) {
         ctx.ui.notify(`[lmstudio] ${warning}`, "warning");
@@ -130,7 +130,7 @@ export function registerCommands(pi: ExtensionAPI, refresh: (cwd?: string) => Pr
   pi.registerCommand("lmstudio-models", {
     description: "List all available local models via the LM Studio native API",
     handler: async (_args, ctx) => {
-      log.info("models command invoked");
+      debugLog("models command invoked");
       const { config, warnings } = loadConfigFromSettings(ctx.cwd);
       for (const warning of warnings) {
         ctx.ui.notify(`[lmstudio] ${warning}`, "warning");
@@ -156,7 +156,7 @@ export function registerCommands(pi: ExtensionAPI, refresh: (cwd?: string) => Pr
   pi.registerCommand("lmstudio-loaded", {
     description: "List currently loaded model instances",
     handler: async (_args, ctx) => {
-      log.info("loaded command invoked");
+      debugLog("loaded command invoked");
       const { config, warnings } = loadConfigFromSettings(ctx.cwd);
       for (const warning of warnings) {
         ctx.ui.notify(`[lmstudio] ${warning}`, "warning");
@@ -183,7 +183,7 @@ export function registerCommands(pi: ExtensionAPI, refresh: (cwd?: string) => Pr
   pi.registerCommand("lmstudio-load", {
     description: "Load a model via the LM Studio native API",
     handler: async (args, ctx) => {
-      log.info("load command invoked with args:", args);
+      debugLog("load command invoked", args);
       const { config, warnings } = loadConfigFromSettings(ctx.cwd);
       for (const warning of warnings) {
         ctx.ui.notify(`[lmstudio] ${warning}`, "warning");
@@ -218,7 +218,7 @@ export function registerCommands(pi: ExtensionAPI, refresh: (cwd?: string) => Pr
   pi.registerCommand("lmstudio-unload", {
     description: "Unload a model instance via the LM Studio native API",
     handler: async (args, ctx) => {
-      log.info("unload command invoked with args:", args);
+      debugLog("unload command invoked", args);
       const { config, warnings } = loadConfigFromSettings(ctx.cwd);
       for (const warning of warnings) {
         ctx.ui.notify(`[lmstudio] ${warning}`, "warning");

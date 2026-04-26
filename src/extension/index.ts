@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { log } from "../debug.js";
+import { debugLog, log } from "../debug.js";
 import { configureDebugLogging } from "../debug.js";
 import { loadConfigFromSettings } from "../config/load.js";
 import { refreshProvider } from "../provider.js";
@@ -35,7 +35,7 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
       if (modelInfoResult.source === "native") {
         updateCompletionCacheFromNativeModels(modelInfoResult.models);
       }
-      const result = await refreshProvider(pi, loaded.config);
+      const result = await refreshProvider(pi, loaded.config, undefined, { quiet: cwd === initialCwd });
       lastResult = result;
       setLastResult(result);
       return result;
@@ -70,12 +70,12 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
     const resultPromise = !lastResult || ctx.cwd !== initialCwd ? startRefresh(ctx.cwd, ctx.cwd !== initialCwd) : Promise.resolve(lastResult);
     void resultPromise.then((result) => {
       if (result.ok) {
-        log.info(`registered ${result.count} local model${result.count === 1 ? "" : "s"}`);
+        debugLog(`registered ${result.count} local model${result.count === 1 ? "" : "s"}`);
       } else {
-        log.error(`initial refresh failed: ${result.error}`);
+        debugLog(`initial refresh failed: ${result.error}`);
       }
       for (const warning of lastWarnings) {
-        log.warn(warning);
+        debugLog(warning);
       }
     });
   });

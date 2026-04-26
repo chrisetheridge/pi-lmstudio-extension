@@ -38,6 +38,7 @@ export async function refreshProvider(
   config: LmStudioConfig,
   fetchModelInfo: (config: LmStudioConfig) => Promise<{ models: LmStudioModelInfo[]; source: "openai" | "native" }> = async (currentConfig) =>
     (await import("./models/fetch.js")).fetchLmStudioModelInfo(currentConfig, fetch),
+  options?: { quiet?: boolean },
 ): Promise<RefreshResult> {
   const start = performance.now();
   debugLog(`refreshing provider '${config.providerName}' at ${config.baseUrl}`);
@@ -61,7 +62,9 @@ export async function refreshProvider(
     const ms = (performance.now() - start).toFixed(2);
     const msg = error instanceof Error ? error.message : String(error);
     debugLog("refresh error", { providerName: config.providerName, error: msg, elapsedMs: ms });
-    log.error(`refresh failed for '${config.providerName}' after ${ms}ms: ${msg}`);
+    if (!options?.quiet) {
+      log.error(`refresh failed for '${config.providerName}' after ${ms}ms: ${msg}`);
+    }
     return { ok: false, error: msg };
   }
 }

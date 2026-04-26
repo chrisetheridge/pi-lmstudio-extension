@@ -86,7 +86,7 @@ export async function fetchNativeModels(
     }
 
     const models = parseNativeModelsPayload(await response.json());
-    fetchLog.info(`found ${models.length} model${models.length === 1 ? "" : "s"} via native endpoint`);
+    // fetchLog.info(`found ${models.length} model${models.length === 1 ? "" : "s"} via native endpoint`);
     return models;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -158,7 +158,7 @@ export async function fetchNativeModelsWithTimeout(
     }
 
     const models = parseNativeModelsPayload(await response.json());
-    fetchLog.info(`found ${models.length} model${models.length === 1 ? "" : "s"} via native endpoint`);
+    // fetchLog.info(`found ${models.length} model${models.length === 1 ? "" : "s"} via native endpoint`);
     return models;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
