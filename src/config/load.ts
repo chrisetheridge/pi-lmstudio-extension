@@ -55,6 +55,11 @@ function coercePartialConfig(value: Record<string, unknown>): Partial<LmStudioCo
   if (typeof value.modelManagementTimeoutMs === "number" && Number.isFinite(value.modelManagementTimeoutMs) && value.modelManagementTimeoutMs > 0) {
     config.modelManagementTimeoutMs = value.modelManagementTimeoutMs;
   }
+  if (typeof value.autoRefresh === "boolean") config.autoRefresh = value.autoRefresh;
+  if (typeof value.refreshIntervalMs === "number" && Number.isFinite(value.refreshIntervalMs) && value.refreshIntervalMs > 0) {
+    config.refreshIntervalMs = value.refreshIntervalMs;
+  }
+  if (typeof value.notifyAutoRefreshChanges === "boolean") config.notifyAutoRefreshChanges = value.notifyAutoRefreshChanges;
 
   return config;
 }

@@ -1,246 +1,211 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { debugLog, log } from "../debug.js";
+import { log, debugLog } from "../debug.js";
 import { loadConfigFromSettings } from "../config/load.js";
-import {
-  fetchNativeModels,
-  loadLmStudioModel,
-  unloadLmStudioModel,
-} from "../models/fetch.js";
-import { parseLoadArgs, parseBooleanArg } from "../models/load-args.js";
-import type { RefreshResult, LoadModelCommandArgs, LoadModelResult, UnloadModelResult } from "../types.js";
+
+import { refreshProvider } from "../provider.js";
+import { fetchLmStudioModelInfo, loadLmStudioModel, unloadLmStudioModel } from "../models/fetch.js";
+
+import type { RefreshResult } from "../types.js";
 import {
   createCompletionCache,
-  updateCacheFromDiscoveredModels,
   updateCacheFromNativeModels,
-  getModelIdCompletions,
-  getLoadedInstanceIdCompletions,
-  getFlagCompletions,
   getLoadArgumentCompletions,
-  parseArgumentPrefix,
+  getLoadedInstanceIdCompletions,
   type CompletionCache,
 } from "./autocomplete.js";
 
 let lastResult: RefreshResult | undefined;
 let lastWarnings: string[] = [];
-let lastDiscoverySource: "openai" | "native" | undefined;
 let completionCache: CompletionCache = createCompletionCache();
 
-export function setLastResult(result: RefreshResult): void {
+export function setLastResult(result: RefreshResult) {
   lastResult = result;
-  if (result.ok) {
-    lastDiscoverySource = result.source;
-    // Update completion cache based on refresh result
-    if (result.source === "openai") {
-      completionCache = updateCacheFromDiscoveredModels(completionCache, result.models);
-    } else {
-      // Native source - we need model info, not just IDs
-      // The cache will be updated separately when native models are fetched
-    }
-  }
 }
 
-export function setLastWarnings(warnings: string[]): void {
+export function setLastWarnings(warnings: string[]) {
   lastWarnings = warnings;
 }
 
-export function getLastDiscoverySource(): typeof lastDiscoverySource {
-  return lastDiscoverySource;
-}
-
-/** Update completion cache from native model info */
-export function updateCompletionCacheFromNativeModels(models: Array<{ id: string; name: string; type: "llm" | "embedding" | "unknown"; loadedInstanceIds: string[] }>): void {
-  completionCache = updateCacheFromNativeModels(completionCache, models as never);
-}
-
-/** Get the current completion cache (for testing) */
-export function getCompletionCache(): CompletionCache {
-  return completionCache;
-}
-
-/** Format a concise model list for notifications. */
-function formatModelList(models: Array<{ id: string; name: string; type: string; loadedInstanceIds: string[] }>, maxItems?: number): string {
-  const items = models.slice(0, maxItems ?? 20);
-  const lines = items.map((m) => {
-    const loaded = m.loadedInstanceIds.length > 0 ? ` [loaded:${m.loadedInstanceIds.length}]` : "";
-    return `  ${m.id}${loaded}`;
-  });
-  if (models.length > (maxItems ?? 20)) {
-    lines.push(`  ... and ${models.length - (maxItems ?? 20)} more`);
-  }
-  return lines.join("\n");
-}
-
-/** Refresh provider registration after load/unload. */
-async function refreshAfterOperation(
+export function registerCommands(
   pi: ExtensionAPI,
-  ctx: { cwd: string },
-  refresh: (cwd?: string) => Promise<RefreshResult>,
-): Promise<void> {
-  try {
-    const result = await refresh(ctx.cwd);
-    if (result.ok) {
-      debugLog(`provider refreshed after operation (${result.count} models)`);
-    }
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    debugLog(`refresh after operation failed: ${msg}`);
+  refreshFn: (cwd?: string) => Promise<RefreshResult>,
+  getState?: () => import("../types.js").LmStudioRefreshState,
+  startPolling?: (config: import("../types.js").LmStudioConfig) => void,
+): void {
+  function getCompletionCache(): CompletionCache {
+    return completionCache;
   }
-}
 
-export function registerCommands(pi: ExtensionAPI, refresh: (cwd?: string) => Promise<RefreshResult>): void {
   pi.registerCommand("lmstudio-refresh", {
-    description: "Refresh LM Studio local models",
-    handler: async (_args, ctx) => {
-      debugLog("refresh command invoked");
-      const result = await refresh(ctx.cwd);
-      for (const warning of lastWarnings) {
-        ctx.ui.notify(`[lmstudio] ${warning}`, "warning");
-      }
+    description: "Re-fetch the model list from LM Studio and re-register the provider",
+    handler: async () => {
+      const result = await refreshFn();
       if (result.ok) {
-        const sourceHint = result.source !== "openai" ? ` (using ${result.source} metadata)` : "";
-        ctx.ui.notify(`[lmstudio] registered ${result.count} local model${result.count === 1 ? "" : "s"}${sourceHint}`, "info");
-        // Update completion cache after successful refresh
-        if (result.source === "openai") {
-          completionCache = updateCacheFromDiscoveredModels(completionCache, result.models);
-        }
+        log.info(`✓ ${result.count} model(s) registered`);
       } else {
-        ctx.ui.notify(`[lmstudio] refresh failed: ${result.error}`, "warning");
+        log.error(result.error);
       }
     },
   });
 
   pi.registerCommand("lmstudio-status", {
-    description: "Show LM Studio provider status",
-    handler: async (_args, ctx) => {
-      debugLog("status command invoked");
-      const { config, warnings } = loadConfigFromSettings(ctx.cwd);
-      for (const warning of warnings) {
-        ctx.ui.notify(`[lmstudio] ${warning}`, "warning");
+    description: "Show configured endpoint and last refresh status",
+    handler: async () => {
+      const cwd = process.cwd();
+      const loaded = loadConfigFromSettings(cwd);
+      const state = getState?.() ?? { lastResult: undefined, lastWarnings: [], lastRefreshAt: undefined, lastRefreshReason: undefined, lastRegisteredModels: [] };
+      const lines: string[] = [
+        `Endpoint: ${loaded.config.baseUrl}`,
+        `Provider: ${loaded.config.providerName}`,
+      ];
+
+      if (state.lastResult) {
+        if (state.lastResult.ok) {
+          lines.push(`Status: ${state.lastResult.count} model(s) registered`);
+        } else {
+          lines.push(`Status: failed — ${state.lastResult.error}`);
+        }
+      } else {
+        lines.push("Status: not yet refreshed");
       }
-      const status =
-        lastResult === undefined
-          ? "not refreshed yet"
-          : lastResult.ok
-            ? `${lastResult.count} local model${lastResult.count === 1 ? "" : "s"} registered${lastDiscoverySource ? ` (metadata: ${lastDiscoverySource})` : ""}`
-            : `last refresh failed: ${lastResult.error}`;
-      ctx.ui.notify(`[lmstudio] ${config.baseUrl} (${config.providerName}/): ${status}`, lastResult?.ok === false ? "warning" : "info");
+
+      if (state.lastRefreshAt) {
+        const ago = Math.round((Date.now() - state.lastRefreshAt) / 1000);
+        lines.push(`Last refresh: ${ago}s ago (${state.lastRefreshReason})`);
+      } else {
+        lines.push("Last refresh: never");
+      }
+
+      if (loaded.config.autoRefresh) {
+        lines.push(`Auto-refresh: enabled (${loaded.config.refreshIntervalMs / 1000}s interval)`);
+      } else {
+        lines.push("Auto-refresh: disabled");
+      }
+
+      if (state.lastWarnings.length > 0) {
+        lines.push("");
+        lines.push("Warnings:");
+        for (const w of state.lastWarnings) {
+          lines.push(`  • ${w}`);
+        }
+      }
+
+      log.info(lines.join("\n"));
     },
   });
 
-  // /lmstudio-models — list all available models from native API
   pi.registerCommand("lmstudio-models", {
-    description: "List all available local models via the LM Studio native API",
-    handler: async (_args, ctx) => {
-      debugLog("models command invoked");
-      const { config, warnings } = loadConfigFromSettings(ctx.cwd);
-      for (const warning of warnings) {
-        ctx.ui.notify(`[lmstudio] ${warning}`, "warning");
-      }
-
+    description: "List all available models from LM Studio's native API",
+    handler: async () => {
+      const cwd = process.cwd();
+      const loaded = loadConfigFromSettings(cwd);
+      let result: { models: import("../types.js").LmStudioModelInfo[]; source: "openai" | "native" };
       try {
-        const models = await fetchNativeModels(config);
-        updateCompletionCacheFromNativeModels(models);
-        if (models.length === 0) {
-          ctx.ui.notify("[lmstudio] no models found via native API", "warning");
-          return;
-        }
-        const output = formatModelList(models, 20);
-        ctx.ui.notify(`[lmstudio] ${models.length} model(s) available:\n${output}`, "info");
+        result = await fetchLmStudioModelInfo(loaded.config, fetch);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        ctx.ui.notify(`[lmstudio] failed to list models: ${msg}`, "warning");
+        log.error(`Failed to fetch model info: ${msg}`);
+        return;
+      }
+      if (result.source === "native") {
+        log.info(`Found ${result.models.length} model(s):\n${result.models.map((m) => `  • ${m.id}: ${m.name}`).join("\n")}`);
+        completionCache = updateCacheFromNativeModels(completionCache, result.models);
+      } else {
+        log.info(`Using OpenAI-compatible API: ${result.models.length} model(s)`);
       }
     },
   });
 
-  // /lmstudio-loaded — list only loaded model instances
   pi.registerCommand("lmstudio-loaded", {
-    description: "List currently loaded model instances",
+    description: "List only loaded model instances from LM Studio's native API",
     handler: async (_args, ctx) => {
-      debugLog("loaded command invoked");
-      const { config, warnings } = loadConfigFromSettings(ctx.cwd);
-      for (const warning of warnings) {
-        ctx.ui.notify(`[lmstudio] ${warning}`, "warning");
-      }
-
+      const cwd = process.cwd();
+      const loaded = loadConfigFromSettings(cwd);
+      let result: { models: import("../types.js").LmStudioModelInfo[]; source: "openai" | "native" };
       try {
-        const models = await fetchNativeModels(config);
-        updateCompletionCacheFromNativeModels(models);
-        const loadedModels = models.filter((m) => m.loadedInstanceIds.length > 0);
+        result = await fetchLmStudioModelInfo(loaded.config, fetch);
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(`Failed to fetch model info: ${msg}`, "error");
+        return;
+      }
+      if (result.source === "native") {
+        const loadedModels = result.models.filter((m) => m.loadedInstanceIds.length > 0);
         if (loadedModels.length === 0) {
-          ctx.ui.notify("[lmstudio] no models currently loaded", "info");
+          ctx.ui.notify("No models currently loaded");
           return;
         }
-        const output = formatModelList(loadedModels, 20);
-        ctx.ui.notify(`[lmstudio] ${loadedModels.length} model(s) loaded:\n${output}`, "info");
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        ctx.ui.notify(`[lmstudio] failed to list loaded models: ${msg}`, "warning");
+        for (const model of loadedModels) {
+          log.info(`${model.id}: ${model.name}`);
+          for (const instId of model.loadedInstanceIds) {
+            log.info(`  └─ ${instId}`);
+          }
+        }
+        completionCache = updateCacheFromNativeModels(completionCache, result.models);
+        ctx.ui.notify(`${loadedModels.length} model(s) loaded`, "info");
+      } else {
+        ctx.ui.notify("Not using native metadata source", "error");
       }
     },
   });
 
-  // /lmstudio-load <model> [options]
   pi.registerCommand("lmstudio-load", {
-    description: "Load a model via the LM Studio native API",
-    getArgumentCompletions: (argumentPrefix) => getLoadArgumentCompletions(completionCache, argumentPrefix),
+    description: "Load a model in LM Studio and refresh Pi registration",
+    getArgumentCompletions: (args) => getLoadArgumentCompletions(getCompletionCache(), args),
     handler: async (args, ctx) => {
-      debugLog("load command invoked", args);
-      const { config, warnings } = loadConfigFromSettings(ctx.cwd);
-      for (const warning of warnings) {
-        ctx.ui.notify(`[lmstudio] ${warning}`, "warning");
-      }
+      const cwd = ctx.cwd;
+      const loaded = loadConfigFromSettings(cwd);
 
-      let parsedArgs: LoadModelCommandArgs;
-      try {
-        parsedArgs = parseLoadArgs(args);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        ctx.ui.notify(`[lmstudio] invalid arguments: ${msg}`, "warning");
+      const parts = args.split(" ");
+      const modelName = parts[0];
+      if (!modelName) {
+        log.error("Usage: /lmstudio-load <model-id> [--context-length <n>] [--flash-attention <true|false>] [--gpu-layers <n>] [--num-gpu <n>]");
         return;
       }
 
-      try {
-        const result = await loadLmStudioModel(config, parsedArgs);
-        const timeStr = result.load_time_seconds !== undefined ? `${result.load_time_seconds.toFixed(2)}s` : "unknown";
-        ctx.ui.notify(
-          `[lmstudio] model loaded: ${parsedArgs.model}\n  instance_id: ${result.instance_id}\n  load_time: ${timeStr}`,
-          "info",
-        );
-        // Refresh provider so Pi sees the newly loaded model
-        await refreshAfterOperation(pi, ctx, refresh);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : String(error);
-        ctx.ui.notify(`[lmstudio] load failed: ${msg}`, "warning");
+      debugLog(`loading model: ${modelName}`);
+
+      const result = await loadLmStudioModel(loaded.config, { model: modelName }, fetch);
+      if (result.status === "success") {
+        log.info(`✓ Model loaded (instance: ${result.instance_id}, time: ${result.load_time_seconds}s)`);
+        await refreshFn(cwd);
+      } else {
+        log.error(`Load failed: ${result.status}`);
       }
     },
   });
 
-  // /lmstudio-unload <instance-id>
   pi.registerCommand("lmstudio-unload", {
-    description: "Unload a model instance via the LM Studio native API",
+    description: "Unload a model instance from LM Studio and refresh Pi registration",
+    getArgumentCompletions: (args) => getLoadedInstanceIdCompletions(getCompletionCache(), args),
     handler: async (args, ctx) => {
-      debugLog("unload command invoked", args);
-      const { config, warnings } = loadConfigFromSettings(ctx.cwd);
-      for (const warning of warnings) {
-        ctx.ui.notify(`[lmstudio] ${warning}`, "warning");
-      }
+      const cwd = ctx.cwd;
+      const loaded = loadConfigFromSettings(cwd);
 
-      const trimmedArgs = args.trim();
-      if (!trimmedArgs) {
-        ctx.ui.notify("[lmstudio] instance_id is required", "warning");
+      if (!args.trim()) {
+        log.error("Usage: /lmstudio-unload <instance-id>");
         return;
       }
 
+      debugLog(`unloading instance: ${args.trim()}`);
+
       try {
-        const result = await unloadLmStudioModel(config, trimmedArgs);
-        ctx.ui.notify(`[lmstudio] model unloaded: ${result.instance_id}`, "info");
-        // Refresh provider so Pi sees the updated state
-        await refreshAfterOperation(pi, ctx, refresh);
+        const result = await unloadLmStudioModel(loaded.config, args.trim(), fetch);
+        log.info(`✓ Instance unloaded: ${result.instance_id}`);
+        await refreshFn(cwd);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        ctx.ui.notify(`[lmstudio] unload failed: ${msg}`, "warning");
+        log.error(`Unload failed: ${msg}`);
       }
+    },
+  });
+
+  // Register completions for the debug flag
+  pi.registerCommand("lmstudio-debug", {
+    description: "Toggle LM Studio debug mode",
+    handler: async (args) => {
+      const enabled = args.trim() === "true" || args.trim() === "1";
+      log.info(`Debug mode ${enabled ? "enabled" : "disabled"}`);
     },
   });
 }

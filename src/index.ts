@@ -63,7 +63,4 @@ export {
   registerCommands,
   setLastResult,
   setLastWarnings,
-  getLastDiscoverySource,
-  updateCompletionCacheFromNativeModels,
-  getCompletionCache,
 } from "./extension/commands.js";

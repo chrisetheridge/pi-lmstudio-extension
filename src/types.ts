@@ -29,6 +29,9 @@ export interface LmStudioConfig {
   nativeBaseUrl?: string;
   includeEmbeddingModels: boolean;
   modelManagementTimeoutMs: number;
+  autoRefresh: boolean;
+  refreshIntervalMs: number;
+  notifyAutoRefreshChanges: boolean;
 }
 
 /** Arguments for the /lmstudio-load command */
@@ -65,7 +68,22 @@ export type RefreshResult =
   | { ok: true; count: number; models: string[]; source: "openai" | "native" }
   | { ok: false; error: string };
 
+export type RefreshReason = "startup" | "manual" | "auto";
+
+export interface LmStudioRefreshState {
+  lastResult: RefreshResult | undefined;
+  lastWarnings: string[];
+  lastRefreshAt: number | undefined;
+  lastRefreshReason: RefreshReason | undefined;
+  lastRegisteredModels: string[];
+}
+
 export type FetchLike = typeof fetch;
+
+export interface ModelChange {
+  added: string[];
+  removed: string[];
+}
 
 interface RefreshProviderApi {
   registerProvider(name: string, config: import("@mariozechner/pi-coding-agent").ProviderConfig): void;

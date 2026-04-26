@@ -88,6 +88,9 @@ Example:
 - `reasoning`: Whether Pi should treat the model as reasoning-capable
 - `input`: Supported input types, usually `["text"]`
 - `fetchTimeoutMs`: How long to wait for LM Studio before treating discovery as failed
+- `autoRefresh`: Enable automatic background refresh of the model list (default: `false`)
+- `refreshIntervalMs`: Interval between auto-refresh polls in milliseconds (default: `30000`, minimum: `5000`)
+- `notifyAutoRefreshChanges`: Show notifications when auto-refresh detects model changes (default: `false`)
 
 ### Changing the prefix
 
@@ -106,7 +109,7 @@ If you want `studio/<model-id>` instead of `local/<model-id>`, set:
 ## Commands
 
 - `/lmstudio-refresh` fetches the model list again and re-registers the provider
-- `/lmstudio-status` shows the configured endpoint and the result of the last refresh
+- `/lmstudio-status` shows the configured endpoint, last refresh status, and polling state (when auto-refresh is enabled)
 - `/lmstudio-models` lists all available models from LM Studio's native API
 - `/lmstudio-loaded` lists only loaded model instances from LM Studio's native API
 - `/lmstudio-load <model> [options]` loads a model, then refreshes Pi registration
@@ -133,6 +136,54 @@ If completions appear stale, run `/lmstudio-refresh` to update the cache.
 - `/lmstudio-load`, `/lmstudio-unload`, and `/lmstudio-loaded` wait for their native API calls to finish before returning
 - If no models are returned, the provider is unregistered until the next successful refresh
 - The extension does not write to `~/.pi/agent/models.json`
+
+### Auto-refresh polling
+
+When enabled, the extension automatically polls LM Studio's model list at a configurable interval and updates Pi's registered models without manual intervention. This is useful when:
+
+- LM Studio starts after Pi
+- You load or unload models in LM Studio while Pi is running
+- Model availability changes unexpectedly
+
+**Configuration:**
+
+```json
+{
+  "lmstudio": {
+    "autoRefresh": true,
+    "refreshIntervalMs": 30000,
+    "notifyAutoRefreshChanges": false
+  }
+}
+```
+
+**Behavior details:**
+
+- Auto-refresh is **disabled by default** to avoid unnecessary network requests
+- Polling interval defaults to 30 seconds and is clamped to a minimum of 5 seconds
+- Failed refreshes are logged at debug level but do not produce repeated warning notifications
+- If LM Studio goes offline, polling continues silently until it reconnects
+- Overlapping refresh calls are coalesced — if a refresh is already in progress, the next tick is skipped
+- When `notifyAutoRefreshChanges` is enabled, you receive one notification when the model set changes (added/removed models)
+- The `/lmstudio-status` command shows whether auto-refresh is active and the last refresh timestamp
+- Polling starts on session start when `autoRefresh` is true; if config isn't available yet, it begins when commands are first used
+
+## Auto-refresh troubleshooting
+
+### Models don't update after polling starts
+
+1. Run `/lmstudio-status` to verify auto-refresh is enabled and see the last refresh time
+2. Check that LM Studio is still running and reachable
+3. Run `/lmstudio-refresh` manually to force an immediate update
+4. Enable debug mode (`pi --lmstudio-debug`) to trace polling ticks
+
+### Too many notifications
+
+Set `notifyAutoRefreshChanges: false` (the default) to suppress change notifications. Auto-refresh will still update models in the background.
+
+### Polling seems slow
+
+Reduce `refreshIntervalMs` but keep it above 5000ms to avoid hammering LM Studio.
 
 ## Debug Mode
 

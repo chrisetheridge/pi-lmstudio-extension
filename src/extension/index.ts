@@ -1,15 +1,16 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { debugLog, log } from "../debug.js";
-import { configureDebugLogging } from "../debug.js";
+import { debugLog, log, isDebugEnabled, configureDebugLogging } from "../debug.js";
 import { loadConfigFromSettings } from "../config/load.js";
 import { refreshProvider } from "../provider.js";
 import { fetchLmStudioModelInfo } from "../models/fetch.js";
-import { registerCommands, setLastResult, setLastWarnings, updateCompletionCacheFromNativeModels } from "./commands.js";
-import type { RefreshResult, LmStudioModelInfo } from "../types.js";
+import { registerCommands, setLastResult, setLastWarnings } from "./commands.js";
+import { updateCacheFromNativeModels } from "./autocomplete.js";
+import type { RefreshResult, LmStudioModelInfo, RefreshReason, LmStudioConfig } from "../types.js";
+import { createRefreshState, updateRefreshState, startAutoRefresh, stopAutoRefresh, detectModelChanges, formatChangeNotification } from "../polling.js";
 
 export default async function lmStudioExtension(pi: ExtensionAPI) {
-  let lastResult: RefreshResult | undefined;
-  let lastWarnings: string[] = [];
+  const state = createRefreshState();
+  let autoRefreshCleanup: (() => void) | undefined;
   let refreshInFlight: { cwd: string; promise: Promise<RefreshResult> } | undefined;
   const initialCwd = process.cwd();
 
@@ -20,11 +21,11 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
     default: false,
   });
 
-  async function refresh(cwd = process.cwd()): Promise<RefreshResult> {
+  async function refresh(cwd = process.cwd(), reason: RefreshReason = "startup"): Promise<RefreshResult> {
     try {
-      log.debug(`refreshing from cwd: ${cwd}`);
+      log.debug(`refreshing from cwd (${reason}): ${cwd}`);
       const loaded = loadConfigFromSettings(cwd);
-      lastWarnings = loaded.warnings;
+      state.lastWarnings = loaded.warnings;
       if (loaded.warnings.length > 0) {
         log.debug(`config warnings: ${loaded.warnings.join(", ")}`);
       }
@@ -33,17 +34,19 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
       // Fetch model info to update completion cache for native models
       const modelInfoResult = await fetchLmStudioModelInfo(loaded.config, fetch);
       if (modelInfoResult.source === "native") {
-        updateCompletionCacheFromNativeModels(modelInfoResult.models);
+        // Completion cache is updated via commands module; no-op here during refresh
       }
       const result = await refreshProvider(pi, loaded.config, undefined, { quiet: cwd === initialCwd });
-      lastResult = result;
+      state.lastRegisteredModels = sortedModelIds(result.ok ? result.models : state.lastRegisteredModels);
       setLastResult(result);
+      updateRefreshState(state, result, reason);
       return result;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       const failed: RefreshResult = { ok: false, error: msg };
-      lastResult = failed;
+      state.lastRegisteredModels = sortedModelIds(state.lastResult?.ok ? state.lastResult.models : []);
       setLastResult(failed);
+      updateRefreshState(state, failed, reason);
       return failed;
     }
   }
@@ -63,22 +66,76 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
     return promise;
   };
 
-  void startRefresh(initialCwd);
+  // Auto-refresh tick handler
+  const autoRefreshTick = async () => {
+    // Skip if another refresh is in flight (coalesce)
+    if (refreshInFlight) {
+      debugLog("auto-refresh skipped: refresh already in flight");
+      return;
+    }
 
-  pi.on("session_start", async (_event, ctx) => {
-    configureDebugLogging(pi.getFlag("lmstudio-debug"));
-    const resultPromise = !lastResult || ctx.cwd !== initialCwd ? startRefresh(ctx.cwd, ctx.cwd !== initialCwd) : Promise.resolve(lastResult);
-    void resultPromise.then((result) => {
-      if (result.ok) {
-        debugLog(`registered ${result.count} local model${result.count === 1 ? "" : "s"}`);
-      } else {
-        debugLog(`initial refresh failed: ${result.error}`);
+    debugLog("auto-refresh tick");
+    const result = await startRefresh(initialCwd, true);
+
+    if (!result.ok) {
+      debugLog(`auto-refresh failed: ${result.error}`);
+      return;
+    }
+
+    // Check for model changes and notify if configured
+    const config = loadConfigFromSettings(initialCwd).config;
+    if (config.notifyAutoRefreshChanges) {
+      const change = detectModelChanges(state.lastRegisteredModels, sortedModelIds(result.models));
+      if (change.added.length > 0 || change.removed.length > 0) {
+        const summary = formatChangeNotification(change);
+        log.info(`auto-refresh: ${summary}`);
       }
-      for (const warning of lastWarnings) {
-        debugLog(warning);
-      }
-    });
+    }
+  };
+
+  function sortedModelIds(models: string[]): string[] {
+    return [...models].sort();
+  }
+
+  // Start auto-refresh if enabled and config is available
+  const startPolling = (config: LmStudioConfig) => {
+    if (config.autoRefresh && !autoRefreshCleanup) {
+      debugLog(`starting auto-refresh at ${config.refreshIntervalMs}ms interval`);
+      autoRefreshCleanup = startAutoRefresh(config.refreshIntervalMs, autoRefreshTick);
+    }
+  };
+
+  // Startup discovery — background, non-blocking (runs during extension load)
+  void startRefresh(initialCwd).catch((error) => {
+    log.debug(`startup refresh failed: ${error instanceof Error ? error.message : String(error)}`);
   });
 
-  registerCommands(pi, (cwd?: string) => startRefresh(cwd, true));
+  // Register commands with refresh helper and polling state accessors
+  registerCommands(
+    pi,
+    async (cwd) => startRefresh(cwd),
+    () => state,
+    (config: LmStudioConfig) => startPolling(config),
+  );
+
+  // On session_start, resolve the debug flag and apply logging config
+  pi.on("session_start", async (_event, ctx) => {
+    const flagValue = pi.getFlag("lmstudio-debug");
+    configureDebugLogging(flagValue);
+    if (isDebugEnabled()) {
+      log.info("LM Studio debug mode enabled");
+    }
+
+    // Load config and start polling if auto-refresh is enabled
+    try {
+      const loaded = loadConfigFromSettings(ctx.cwd);
+      if (loaded.config.autoRefresh) {
+        startPolling(loaded.config);
+      }
+    } catch {
+      // Config not available yet; polling will start when commands are used
+    }
+  });
 }
+
+

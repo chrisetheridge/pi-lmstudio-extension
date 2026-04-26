@@ -2,8 +2,17 @@ import type { LmStudioConfig, MetadataSource } from "../types.js";
 import { DEFAULT_CONFIG } from "./defaults.js";
 import { normalizeOpenAiBaseUrl, normalizeNativeBaseUrl } from "../url.js";
 
+const MIN_REFRESH_INTERVAL_MS = 5000;
+
 function positiveNumberOrDefault(value: number, defaultValue: number): number {
   return Number.isFinite(value) && value > 0 ? value : defaultValue;
+}
+
+function clampRefreshIntervalMs(value: number | undefined): number {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) {
+    return Math.max(value, MIN_REFRESH_INTERVAL_MS);
+  }
+  return DEFAULT_CONFIG.refreshIntervalMs;
 }
 
 export function mergeConfig(
@@ -32,6 +41,9 @@ export function mergeConfig(
       : DEFAULT_CONFIG.modelMetadataSource,
     nativeBaseUrl,
     includeEmbeddingModels: merged.includeEmbeddingModels ?? DEFAULT_CONFIG.includeEmbeddingModels,
+    autoRefresh: merged.autoRefresh ?? DEFAULT_CONFIG.autoRefresh,
+    refreshIntervalMs: clampRefreshIntervalMs(merged.refreshIntervalMs),
+    notifyAutoRefreshChanges: merged.notifyAutoRefreshChanges ?? DEFAULT_CONFIG.notifyAutoRefreshChanges,
   };
 }
 
