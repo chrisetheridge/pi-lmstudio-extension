@@ -10,7 +10,7 @@ import type { RefreshResult, LmStudioModelInfo } from "../types.js";
 export default async function lmStudioExtension(pi: ExtensionAPI) {
   let lastResult: RefreshResult | undefined;
   let lastWarnings: string[] = [];
-  let refreshInFlight: Promise<RefreshResult> | undefined;
+  let refreshInFlight: { cwd: string; promise: Promise<RefreshResult> } | undefined;
   const initialCwd = process.cwd();
 
   // Register the debug flag
@@ -48,18 +48,18 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
     }
   }
 
-  const startRefresh = (cwd = process.cwd()): Promise<RefreshResult> => {
-    if (refreshInFlight) {
-      return refreshInFlight;
+  const startRefresh = (cwd = process.cwd(), force = false): Promise<RefreshResult> => {
+    if (!force && refreshInFlight?.cwd === cwd) {
+      return refreshInFlight.promise;
     }
 
     const promise = refresh(cwd).finally(() => {
-      if (refreshInFlight === promise) {
+      if (refreshInFlight?.promise === promise) {
         refreshInFlight = undefined;
       }
     });
 
-    refreshInFlight = promise;
+    refreshInFlight = { cwd, promise };
     return promise;
   };
 
@@ -67,7 +67,7 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     configureDebugLogging(pi.getFlag("lmstudio-debug"));
-    const resultPromise = !lastResult || ctx.cwd !== initialCwd ? startRefresh(ctx.cwd) : Promise.resolve(lastResult);
+    const resultPromise = !lastResult || ctx.cwd !== initialCwd ? startRefresh(ctx.cwd, ctx.cwd !== initialCwd) : Promise.resolve(lastResult);
     void resultPromise.then((result) => {
       if (result.ok) {
         log.info(`registered ${result.count} local model${result.count === 1 ? "" : "s"}`);
@@ -80,5 +80,5 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
     });
   });
 
-  registerCommands(pi, refresh);
+  registerCommands(pi, (cwd?: string) => startRefresh(cwd, true));
 }

@@ -138,6 +138,7 @@ export function registerCommands(pi: ExtensionAPI, refresh: (cwd?: string) => Pr
 
       try {
         const models = await fetchNativeModels(config);
+        updateCompletionCacheFromNativeModels(models);
         if (models.length === 0) {
           ctx.ui.notify("[lmstudio] no models found via native API", "warning");
           return;
@@ -163,6 +164,7 @@ export function registerCommands(pi: ExtensionAPI, refresh: (cwd?: string) => Pr
 
       try {
         const models = await fetchNativeModels(config);
+        updateCompletionCacheFromNativeModels(models);
         const loadedModels = models.filter((m) => m.loadedInstanceIds.length > 0);
         if (loadedModels.length === 0) {
           ctx.ui.notify("[lmstudio] no models currently loaded", "info");

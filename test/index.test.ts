@@ -26,6 +26,7 @@ import {
   parseLoadArgs,
   parseBooleanArg,
   parseNativeModelsPayload,
+  registerCommands,
   type LmStudioModelInfo,
   type LmStudioConfig,
 } from "../src/index.js";
@@ -967,6 +968,46 @@ describe("lmStudioExtension", () => {
     await handlers.get("session_start")?.({ type: "session_start", reason: "new" }, { cwd, ui: { notify: vi.fn() } });
 
     expect(isDebugEnabled()).toBe(true);
+  });
+
+  it("blocks until /lmstudio-loaded finishes fetching native models", async () => {
+    vi.resetModules();
+    let resolveFetch!: (value: Response) => void;
+    const fetchImpl = vi.fn(() => new Promise<Response>((resolve) => {
+      resolveFetch = resolve;
+    }));
+    vi.stubGlobal("fetch", fetchImpl);
+
+    const handlers = new Map<string, (args: string, ctx: { cwd: string; ui: { notify: (message: string, kind?: string) => void } }) => Promise<void>>();
+    const pi = {
+      registerCommand: vi.fn((name: string, definition: { handler: (args: string, ctx: { cwd: string; ui: { notify: (message: string, kind?: string) => void } }) => Promise<void> }) => {
+        handlers.set(name, definition.handler);
+      }),
+      registerProvider: vi.fn(),
+      unregisterProvider: vi.fn(),
+      registerFlag: vi.fn(),
+      getFlag: vi.fn(),
+    };
+
+    registerCommands(pi as never, async () => ({ ok: true, count: 0, models: [], source: "openai" }));
+
+    const notify = vi.fn();
+    const pending = handlers.get("lmstudio-loaded")?.("", { cwd: process.cwd(), ui: { notify } });
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+
+    let settled = false;
+    void pending?.then(() => {
+      settled = true;
+    });
+
+    await Promise.resolve();
+    expect(settled).toBe(false);
+
+    resolveFetch(new Response(JSON.stringify({ models: [{ type: "llm", key: "loaded-model", loaded_instances: [{ id: "inst-1" }] }] })));
+    await pending;
+
+    expect(settled).toBe(true);
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("model(s) loaded"), "info");
   });
 });
 
