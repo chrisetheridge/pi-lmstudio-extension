@@ -4,6 +4,21 @@ This Pi extension discovers models from a running LM Studio server and registers
 
 By default, the extension exposes discovered models as `local/<model-id>`, so a model named `qwen2.5-coder-7b` in LM Studio appears in Pi as `local/qwen2.5-coder-7b`.
 
+## Note
+
+This repo has been almost entirely written by a local model, [qwen-3.6-35b-a3b-gguf](https://huggingface.co/unsloth/Qwen3.6-35B-A3B-GGUF). Its mostly been an experiment on how far I can push my local hardware for local coding.
+
+It started with a plan from GPT5.5. From there all code was written by my local model.
+
+### Specs
+- pi.dev harness, with little-coder
+- RX 7800 XT GPU, 16gb vram
+- 32gb DDR5 system ram
+- Ryzen 5 7600
+- Using lmstudio to serve the models
+
+So far the experience has been far better than expected. It took a lot of experimentation to get t/s fast enough, but now it feels pretty good.
+
 ## What It Does
 
 - Fetches `GET <baseUrl>/models` from LM Studio
