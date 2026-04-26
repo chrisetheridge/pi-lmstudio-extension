@@ -48,13 +48,18 @@ export async function refreshProvider(
     const { models, source } = await fetchModelInfo(config);
     debugLog("refresh result", { modelCount: models.length, source, modelIds: models.map((m) => m.id) });
     if (models.length === 0) {
-      log.warn(`no models found, unregistering provider '${config.providerName}'`);
+      const message = `no models found, unregistering provider '${config.providerName}'`;
+      if (options?.quiet) {
+        debugLog(message);
+      } else {
+        log.warn(message);
+      }
       pi.unregisterProvider?.(config.providerName);
     } else {
       const providerConfig = buildProviderConfig(config, models);
       pi.registerProvider(config.providerName, providerConfig);
       const ms = (performance.now() - start).toFixed(2);
-      log.info(`provider '${config.providerName}' registered with ${models.length} model${models.length === 1 ? "" : "s"} in ${ms}ms (source: ${source})`);
+      debugLog(`provider '${config.providerName}' registered with ${models.length} model${models.length === 1 ? "" : "s"} in ${ms}ms (source: ${source})`);
     }
 
     return { ok: true, count: models.length, models: models.map((m) => m.id), source };

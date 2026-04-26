@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { log, debugLog } from "../debug.js";
+import { debugLog } from "../debug.js";
 import { loadConfigFromSettings } from "../config/load.js";
 
 import { refreshProvider } from "../provider.js";
@@ -38,65 +38,70 @@ export function registerCommands(
 
   pi.registerCommand("lmstudio-refresh", {
     description: "Re-fetch the model list from LM Studio and re-register the provider",
-    handler: async () => {
+    handler: async (_args, ctx) => {
       const result = await refreshFn();
       if (result.ok) {
-        log.info(`✓ ${result.count} model(s) registered`);
+        ctx.ui.notify(`OK: ${result.count} model(s) registered`, "info");
       } else {
-        log.error(result.error);
+        ctx.ui.notify(`Refresh failed: ${result.error}`, "error");
       }
     },
   });
 
   pi.registerCommand("lmstudio-status", {
     description: "Show configured endpoint and last refresh status",
-    handler: async () => {
-      const cwd = process.cwd();
-      const loaded = loadConfigFromSettings(cwd);
-      const state = getState?.() ?? { lastResult: undefined, lastWarnings: [], lastRefreshAt: undefined, lastRefreshReason: undefined, lastRegisteredModels: [] };
-      const lines: string[] = [
-        `Endpoint: ${loaded.config.baseUrl}`,
-        `Provider: ${loaded.config.providerName}`,
-      ];
+    handler: async (_args, ctx) => {
+      try {
+        const cwd = process.cwd();
+        const loaded = loadConfigFromSettings(cwd);
+        const state = getState?.() ?? { lastResult: undefined, lastWarnings: [], lastRefreshAt: undefined, lastRefreshReason: undefined, lastRegisteredModels: [] };
+        const lines: string[] = [
+          `Endpoint: ${loaded.config.baseUrl}`,
+          `Provider: ${loaded.config.providerName}`,
+        ];
 
-      if (state.lastResult) {
-        if (state.lastResult.ok) {
-          lines.push(`Status: ${state.lastResult.count} model(s) registered`);
+        if (state.lastResult) {
+          if (state.lastResult.ok) {
+            lines.push(`Status: OK - ${state.lastResult.count} model(s) registered`);
+          } else {
+            lines.push(`Status: failed - ${state.lastResult.error}`);
+          }
         } else {
-          lines.push(`Status: failed — ${state.lastResult.error}`);
+          lines.push("Status: not yet refreshed");
         }
-      } else {
-        lines.push("Status: not yet refreshed");
-      }
 
-      if (state.lastRefreshAt) {
-        const ago = Math.round((Date.now() - state.lastRefreshAt) / 1000);
-        lines.push(`Last refresh: ${ago}s ago (${state.lastRefreshReason})`);
-      } else {
-        lines.push("Last refresh: never");
-      }
-
-      if (loaded.config.autoRefresh) {
-        lines.push(`Auto-refresh: enabled (${loaded.config.refreshIntervalMs / 1000}s interval)`);
-      } else {
-        lines.push("Auto-refresh: disabled");
-      }
-
-      if (state.lastWarnings.length > 0) {
-        lines.push("");
-        lines.push("Warnings:");
-        for (const w of state.lastWarnings) {
-          lines.push(`  • ${w}`);
+        if (state.lastRefreshAt) {
+          const ago = Math.round((Date.now() - state.lastRefreshAt) / 1000);
+          lines.push(`Last refresh: ${ago}s ago (${state.lastRefreshReason})`);
+        } else {
+          lines.push("Last refresh: never");
         }
-      }
 
-      log.info(lines.join("\n"));
+        if (loaded.config.autoRefresh) {
+          lines.push(`Auto-refresh: enabled (${loaded.config.refreshIntervalMs / 1000}s interval)`);
+        } else {
+          lines.push("Auto-refresh: disabled");
+        }
+
+        if (state.lastWarnings.length > 0) {
+          lines.push("");
+          lines.push("Warnings:");
+          for (const w of state.lastWarnings) {
+            lines.push(`- ${w}`);
+          }
+        }
+
+        ctx.ui.notify(lines.join("\n"), "info");
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(`Failed to show status: ${msg}`, "error");
+      }
     },
   });
 
   pi.registerCommand("lmstudio-models", {
     description: "List all available models from LM Studio's native API",
-    handler: async () => {
+    handler: async (_args, ctx) => {
       const cwd = process.cwd();
       const loaded = loadConfigFromSettings(cwd);
       let result: { models: import("../types.js").LmStudioModelInfo[]; source: "openai" | "native" };
@@ -104,14 +109,17 @@ export function registerCommands(
         result = await fetchLmStudioModelInfo(loaded.config, fetch);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        log.error(`Failed to fetch model info: ${msg}`);
+        ctx.ui.notify(`Failed to fetch model info: ${msg}`, "error");
         return;
       }
       if (result.source === "native") {
-        log.info(`Found ${result.models.length} model(s):\n${result.models.map((m) => `  • ${m.id}: ${m.name}`).join("\n")}`);
         completionCache = updateCacheFromNativeModels(completionCache, result.models);
+        ctx.ui.notify(
+          `Found ${result.models.length} model(s):\n${result.models.map((m) => `- ${m.id}: ${m.name}`).join("\n")}`,
+          "info",
+        );
       } else {
-        log.info(`Using OpenAI-compatible API: ${result.models.length} model(s)`);
+        ctx.ui.notify(`Using OpenAI-compatible API: ${result.models.length} model(s)`, "info");
       }
     },
   });
@@ -132,17 +140,18 @@ export function registerCommands(
       if (result.source === "native") {
         const loadedModels = result.models.filter((m) => m.loadedInstanceIds.length > 0);
         if (loadedModels.length === 0) {
-          ctx.ui.notify("No models currently loaded");
+          ctx.ui.notify("No models currently loaded", "info");
           return;
         }
+        const lines = [`Loaded ${loadedModels.length} model(s):`];
         for (const model of loadedModels) {
-          log.info(`${model.id}: ${model.name}`);
+          lines.push(`- ${model.id}: ${model.name}`);
           for (const instId of model.loadedInstanceIds) {
-            log.info(`  └─ ${instId}`);
+            lines.push(`  - ${instId}`);
           }
         }
         completionCache = updateCacheFromNativeModels(completionCache, result.models);
-        ctx.ui.notify(`${loadedModels.length} model(s) loaded`, "info");
+        ctx.ui.notify(lines.join("\n"), "info");
       } else {
         ctx.ui.notify("Not using native metadata source", "error");
       }
@@ -159,7 +168,7 @@ export function registerCommands(
       const parts = args.split(" ");
       const modelName = parts[0];
       if (!modelName) {
-        log.error("Usage: /lmstudio-load <model-id> [--context-length <n>] [--flash-attention <true|false>] [--gpu-layers <n>] [--num-gpu <n>]");
+        ctx.ui.notify("Usage: /lmstudio-load <model-id> [--context-length <n>] [--flash-attention <true|false>] [--gpu-layers <n>] [--num-gpu <n>]", "warning");
         return;
       }
 
@@ -167,10 +176,10 @@ export function registerCommands(
 
       const result = await loadLmStudioModel(loaded.config, { model: modelName }, fetch);
       if (result.status === "success") {
-        log.info(`✓ Model loaded (instance: ${result.instance_id}, time: ${result.load_time_seconds}s)`);
+        ctx.ui.notify(`OK: Model loaded (instance: ${result.instance_id}, time: ${result.load_time_seconds}s)`, "info");
         await refreshFn(cwd);
       } else {
-        log.error(`Load failed: ${result.status}`);
+        ctx.ui.notify(`Load failed: ${result.status}`, "error");
       }
     },
   });
@@ -183,7 +192,7 @@ export function registerCommands(
       const loaded = loadConfigFromSettings(cwd);
 
       if (!args.trim()) {
-        log.error("Usage: /lmstudio-unload <instance-id>");
+        ctx.ui.notify("Usage: /lmstudio-unload <instance-id>", "warning");
         return;
       }
 
@@ -191,11 +200,11 @@ export function registerCommands(
 
       try {
         const result = await unloadLmStudioModel(loaded.config, args.trim(), fetch);
-        log.info(`✓ Instance unloaded: ${result.instance_id}`);
+        ctx.ui.notify(`OK: Instance unloaded: ${result.instance_id}`, "info");
         await refreshFn(cwd);
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
-        log.error(`Unload failed: ${msg}`);
+        ctx.ui.notify(`Unload failed: ${msg}`, "error");
       }
     },
   });
@@ -203,9 +212,9 @@ export function registerCommands(
   // Register completions for the debug flag
   pi.registerCommand("lmstudio-debug", {
     description: "Toggle LM Studio debug mode",
-    handler: async (args) => {
+    handler: async (args, ctx) => {
       const enabled = args.trim() === "true" || args.trim() === "1";
-      log.info(`Debug mode ${enabled ? "enabled" : "disabled"}`);
+      ctx.ui.notify(`Debug mode ${enabled ? "enabled" : "disabled"}`, "info");
     },
   });
 }

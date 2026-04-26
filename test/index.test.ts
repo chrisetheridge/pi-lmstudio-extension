@@ -883,6 +883,58 @@ describe("refreshProvider", () => {
 });
 
 describe("lmStudioExtension", () => {
+  it("renders /lmstudio-status through ui.notify", async () => {
+    const handlers = new Map<string, (args: string, ctx: { cwd: string; ui: { notify: (message: string, kind?: string) => void } }) => Promise<void>>();
+    const pi = {
+      registerCommand: vi.fn((name: string, definition: { handler: (args: string, ctx: { cwd: string; ui: { notify: (message: string, kind?: string) => void } }) => Promise<void> }) => {
+        handlers.set(name, definition.handler);
+      }),
+      registerProvider: vi.fn(),
+      unregisterProvider: vi.fn(),
+      registerFlag: vi.fn(),
+      getFlag: vi.fn(),
+    };
+
+    registerCommands(
+      pi as never,
+      async () => ({ ok: true, count: 0, models: [], source: "openai" }),
+      () => ({
+        lastResult: { ok: true, count: 2, models: ["model-a", "model-b"], source: "native" },
+        lastWarnings: ["first warning", "second warning"],
+        lastRefreshAt: Date.now() - 4000,
+        lastRefreshReason: "manual",
+        lastRegisteredModels: ["model-a", "model-b"],
+      }),
+    );
+
+    const notify = vi.fn();
+    await handlers.get("lmstudio-status")?.("", { cwd: process.cwd(), ui: { notify } });
+
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Endpoint:"), "info");
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Warnings:"), "info");
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Status: OK - 2 model(s) registered"), "info");
+  });
+
+  it("renders /lmstudio-refresh through ui.notify", async () => {
+    const handlers = new Map<string, (args: string, ctx: { cwd: string; ui: { notify: (message: string, kind?: string) => void } }) => Promise<void>>();
+    const pi = {
+      registerCommand: vi.fn((name: string, definition: { handler: (args: string, ctx: { cwd: string; ui: { notify: (message: string, kind?: string) => void } }) => Promise<void> }) => {
+        handlers.set(name, definition.handler);
+      }),
+      registerProvider: vi.fn(),
+      unregisterProvider: vi.fn(),
+      registerFlag: vi.fn(),
+      getFlag: vi.fn(),
+    };
+
+    registerCommands(pi as never, async () => ({ ok: true, count: 3, models: ["a", "b", "c"], source: "openai" }));
+
+    const notify = vi.fn();
+    await handlers.get("lmstudio-refresh")?.("", { cwd: process.cwd(), ui: { notify } });
+
+    expect(notify).toHaveBeenCalledWith("OK: 3 model(s) registered", "info");
+  });
+
   it("registers discovered models during extension load so saved defaults can restore", async () => {
     vi.resetModules();
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ models: [{ type: "llm", key: "startup-model" }] }))));
@@ -1008,7 +1060,7 @@ describe("lmStudioExtension", () => {
     await pending;
 
     expect(settled).toBe(true);
-    expect(notify).toHaveBeenCalledWith(expect.stringContaining("model(s) loaded"), "info");
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("Loaded 1 model(s)"), "info");
   });
 });
 
