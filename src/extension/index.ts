@@ -105,10 +105,17 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
     }
   };
 
-  // Startup discovery — background, non-blocking (runs during extension load)
-  void startRefresh(initialCwd).catch((error) => {
-    log.debug(`startup refresh failed: ${error instanceof Error ? error.message : String(error)}`);
-  });
+  // Startup discovery — synchronous so models are available when Pi creates the model picker.
+  // The loader awaits async factories, so we register providers before pending registrations
+  // are processed by createAgentSessionServices.
+  try {
+    const startupResult = await startRefresh(initialCwd);
+    if (!startupResult.ok) {
+      log.debug(`startup refresh failed: ${startupResult.error}`);
+    }
+  } catch (error) {
+    log.debug(`startup refresh error: ${error instanceof Error ? error.message : String(error)}`);
+  }
 
   // Register commands with refresh helper and polling state accessors
   registerCommands(
