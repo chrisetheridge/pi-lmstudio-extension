@@ -110,6 +110,7 @@ If you want `studio/<model-id>` instead of `local/<model-id>`, set:
 
 - `/lmstudio-refresh` fetches the model list again and re-registers the provider
 - `/lmstudio-status` shows the configured endpoint, last refresh status, and polling state (when auto-refresh is enabled)
+- `/lmstudio-config` dumps the effective LM Studio diagnostic config with secrets redacted
 - `/lmstudio-models` lists all available models from LM Studio's native API
 - `/lmstudio-loaded` lists only loaded model instances from LM Studio's native API
 - `/lmstudio-load <model> [options]` loads a model, then refreshes Pi registration

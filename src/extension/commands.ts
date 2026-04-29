@@ -26,6 +26,35 @@ export function setLastWarnings(warnings: string[]) {
   lastWarnings = warnings;
 }
 
+function redactSecret(value: string): string {
+  if (!value) return "<empty>";
+  return `<set:${value.length} chars>`;
+}
+
+function formatDiagnosticConfig(
+  loaded: import("../types.js").LoadedConfig,
+  state: import("../types.js").LmStudioRefreshState,
+  cwd: string,
+): string {
+  const config = loaded.config;
+  const diagnostic = {
+    cwd,
+    config: {
+      ...config,
+      apiKey: redactSecret(config.apiKey),
+    },
+    warnings: loaded.warnings,
+    runtime: {
+      lastRefreshAt: state.lastRefreshAt ? new Date(state.lastRefreshAt).toISOString() : null,
+      lastRefreshReason: state.lastRefreshReason ?? null,
+      lastResult: state.lastResult ?? null,
+      lastRegisteredModels: state.lastRegisteredModels,
+    },
+  };
+
+  return `LM Studio diagnostic config:\n${JSON.stringify(diagnostic, null, 2)}`;
+}
+
 export function registerCommands(
   pi: ExtensionAPI,
   refreshFn: (cwd?: string) => Promise<RefreshResult>,
@@ -95,6 +124,21 @@ export function registerCommands(
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         ctx.ui.notify(`Failed to show status: ${msg}`, "error");
+      }
+    },
+  });
+
+  pi.registerCommand("lmstudio-config", {
+    description: "Dump LM Studio diagnostic configuration",
+    handler: async (_args, ctx) => {
+      try {
+        const cwd = ctx.cwd ?? process.cwd();
+        const loaded = loadConfigFromSettings(cwd);
+        const state = getState?.() ?? { lastResult: undefined, lastWarnings: [], lastRefreshAt: undefined, lastRefreshReason: undefined, lastRegisteredModels: [] };
+        ctx.ui.notify(formatDiagnosticConfig(loaded, state, cwd), "info");
+      } catch (error) {
+        const msg = error instanceof Error ? error.message : String(error);
+        ctx.ui.notify(`Failed to dump config: ${msg}`, "error");
       }
     },
   });

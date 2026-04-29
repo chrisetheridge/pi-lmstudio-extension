@@ -915,6 +915,49 @@ describe("lmStudioExtension", () => {
     expect(notify).toHaveBeenCalledWith(expect.stringContaining("Status: OK - 2 model(s) registered"), "info");
   });
 
+  it("renders /lmstudio-config through ui.notify with redacted secrets", async () => {
+    const root = join(tmpdir(), `pi-extension-lmstudio-config-${crypto.randomUUID()}`);
+    const agentDir = join(root, "agent");
+    const cwd = join(root, "project");
+    mkdirSync(agentDir, { recursive: true });
+    mkdirSync(join(cwd, ".pi"), { recursive: true });
+    process.env.PI_CODING_AGENT_DIR = agentDir;
+    writeFileSync(join(cwd, ".pi", "settings.json"), JSON.stringify({ lmstudio: { apiKey: "super-secret", providerName: "studio" } }));
+
+    const handlers = new Map<string, (args: string, ctx: { cwd: string; ui: { notify: (message: string, kind?: string) => void } }) => Promise<void>>();
+    const pi = {
+      registerCommand: vi.fn((name: string, definition: { handler: (args: string, ctx: { cwd: string; ui: { notify: (message: string, kind?: string) => void } }) => Promise<void> }) => {
+        handlers.set(name, definition.handler);
+      }),
+      registerProvider: vi.fn(),
+      unregisterProvider: vi.fn(),
+      registerFlag: vi.fn(),
+      getFlag: vi.fn(),
+    };
+
+    registerCommands(
+      pi as never,
+      async () => ({ ok: true, count: 0, models: [], source: "openai" }),
+      () => ({
+        lastResult: { ok: true, count: 1, models: ["model-a"], source: "native" },
+        lastWarnings: [],
+        lastRefreshAt: undefined,
+        lastRefreshReason: undefined,
+        lastRegisteredModels: ["model-a"],
+      }),
+    );
+
+    const notify = vi.fn();
+    await handlers.get("lmstudio-config")?.("", { cwd, ui: { notify } });
+
+    expect(notify).toHaveBeenCalledWith(expect.stringContaining("LM Studio diagnostic config"), "info");
+    const message = notify.mock.calls[0][0] as string;
+    expect(message).toContain('"providerName": "studio"');
+    expect(message).toContain('"apiKey": "<set:12 chars>"');
+    expect(message).not.toContain("super-secret");
+    expect(message).toContain('"lastRegisteredModels"');
+  });
+
   it("renders /lmstudio-refresh through ui.notify", async () => {
     const handlers = new Map<string, (args: string, ctx: { cwd: string; ui: { notify: (message: string, kind?: string) => void } }) => Promise<void>>();
     const pi = {
