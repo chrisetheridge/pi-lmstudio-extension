@@ -29,6 +29,14 @@ So far the experience has been far better than expected. It took a lot of experi
 
 ## Installation
 
+### Git package install
+
+```bash
+pi install git:github.com/chrisetheridge/pi-lmstudio-extensions
+```
+
+Pi clones git packages, runs `npm install` when `package.json` is present, then loads the resources declared in the `pi` manifest.
+
 ### Development install
 
 Run the repo directly with Pi:

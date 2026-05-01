@@ -6,12 +6,17 @@
   "private": true,
   "scripts": {
     "check": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "pack:dry-run": "npm pack --dry-run"
   },
   "keywords": [
     "pi-package",
     "pi-extension",
     "lmstudio"
+  ],
+  "files": [
+    "src",
+    "README.md"
   ],
   "pi": {
     "extensions": [
@@ -20,6 +25,11 @@
   },
   "peerDependencies": {
     "@mariozechner/pi-coding-agent": "*"
+  },
+  "peerDependenciesMeta": {
+    "@mariozechner/pi-coding-agent": {
+      "optional": true
+    }
   },
   "devDependencies": {
     "@mariozechner/pi-coding-agent": "0.70.0",
