@@ -20,7 +20,6 @@ import {
   getFlagCompletions,
   getLoadArgumentCompletions,
   parseArgumentPrefix,
-  EMPTY_CACHE,
   deriveNativeBaseUrl,
   loadLmStudioModel,
   unloadLmStudioModel,

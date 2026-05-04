@@ -3,7 +3,6 @@ import { join } from "node:path";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
 import { debugLog } from "../debug.js";
 import type { LmStudioConfig, LoadedConfig } from "../types.js";
-import { DEFAULT_CONFIG } from "./defaults.js";
 import { mergeConfig } from "./merge.js";
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -1,4 +1,4 @@
-import type { LmStudioConfig, MetadataSource } from "../types.js";
+import type { LmStudioConfig } from "../types.js";
 import { DEFAULT_CONFIG } from "./defaults.js";
 import { normalizeOpenAiBaseUrl, normalizeNativeBaseUrl } from "../url.js";
 

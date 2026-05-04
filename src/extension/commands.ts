@@ -2,7 +2,6 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { debugLog } from "../debug.js";
 import { loadConfigFromSettings } from "../config/load.js";
 
-import { refreshProvider } from "../provider.js";
 import { fetchLmStudioModelInfo, loadLmStudioModel, unloadLmStudioModel } from "../models/fetch.js";
 
 import type { RefreshResult } from "../types.js";
@@ -14,17 +13,7 @@ import {
   type CompletionCache,
 } from "./autocomplete.js";
 
-let lastResult: RefreshResult | undefined;
-let lastWarnings: string[] = [];
 let completionCache: CompletionCache = createCompletionCache();
-
-export function setLastResult(result: RefreshResult) {
-  lastResult = result;
-}
-
-export function setLastWarnings(warnings: string[]) {
-  lastWarnings = warnings;
-}
 
 function redactSecret(value: string): string {
   if (!value) return "<empty>";
@@ -59,7 +48,6 @@ export function registerCommands(
   pi: ExtensionAPI,
   refreshFn: (cwd?: string) => Promise<RefreshResult>,
   getState?: () => import("../types.js").LmStudioRefreshState,
-  startPolling?: (config: import("../types.js").LmStudioConfig) => void,
 ): void {
   function getCompletionCache(): CompletionCache {
     return completionCache;

@@ -1,5 +1,4 @@
 import type { RefreshReason, LmStudioRefreshState, ModelChange } from "./types.js";
-import { debugLog } from "./debug.js";
 
 /** Stable-sorted model IDs for deterministic comparison. */
 function sortedModelIds(models: string[]): string[] {

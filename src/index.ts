@@ -61,6 +61,4 @@ export {
 // Re-export command functions
 export {
   registerCommands,
-  setLastResult,
-  setLastWarnings,
 } from "./extension/commands.js";

@@ -3,10 +3,9 @@ import { debugLog, log, isDebugEnabled, configureDebugLogging } from "../debug.j
 import { loadConfigFromSettings } from "../config/load.js";
 import { refreshProvider } from "../provider.js";
 import { fetchLmStudioModelInfo } from "../models/fetch.js";
-import { registerCommands, setLastResult, setLastWarnings } from "./commands.js";
-import { updateCacheFromNativeModels } from "./autocomplete.js";
-import type { RefreshResult, LmStudioModelInfo, RefreshReason, LmStudioConfig } from "../types.js";
-import { createRefreshState, updateRefreshState, startAutoRefresh, stopAutoRefresh, detectModelChanges, formatChangeNotification } from "../polling.js";
+import { registerCommands } from "./commands.js";
+import type { RefreshResult, RefreshReason, LmStudioConfig } from "../types.js";
+import { createRefreshState, updateRefreshState, startAutoRefresh, detectModelChanges, formatChangeNotification } from "../polling.js";
 
 export default async function lmStudioExtension(pi: ExtensionAPI) {
   const state = createRefreshState();
@@ -30,7 +29,6 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
         log.debug(`config warnings: ${loaded.warnings.join(", ")}`);
       }
       log.debug(`effective config: baseUrl=${loaded.config.baseUrl}, provider=${loaded.config.providerName}, contextWindow=${loaded.config.contextWindow}, maxTokens=${loaded.config.maxTokens}`);
-      setLastWarnings(loaded.warnings);
       // Fetch model info to update completion cache for native models
       const modelInfoResult = await fetchLmStudioModelInfo(loaded.config, fetch);
       if (modelInfoResult.source === "native") {
@@ -38,14 +36,12 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
       }
       const result = await refreshProvider(pi, loaded.config, undefined, { quiet: cwd === initialCwd });
       state.lastRegisteredModels = sortedModelIds(result.ok ? result.models : state.lastRegisteredModels);
-      setLastResult(result);
       updateRefreshState(state, result, reason);
       return result;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       const failed: RefreshResult = { ok: false, error: msg };
       state.lastRegisteredModels = sortedModelIds(state.lastResult?.ok ? state.lastResult.models : []);
-      setLastResult(failed);
       updateRefreshState(state, failed, reason);
       return failed;
     }
@@ -122,7 +118,6 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
     pi,
     async (cwd) => startRefresh(cwd),
     () => state,
-    (config: LmStudioConfig) => startPolling(config),
   );
 
   // On session_start, resolve the debug flag and apply logging config

@@ -1,5 +1,5 @@
 import { consola } from "consola";
-import { debugLog, log } from "../debug.js";
+import { debugLog } from "../debug.js";
 import type {
   LmStudioConfig,
   FetchLike,
@@ -48,7 +48,7 @@ export async function fetchOpenAiModels(
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       debugLog("openai fetch aborted", { timeoutMs: config.fetchTimeoutMs });
-      throw new Error(`model fetch timed out after ${config.fetchTimeoutMs}ms`);
+      throw new Error(`model fetch timed out after ${config.fetchTimeoutMs}ms`, { cause: error });
     }
     throw error;
   } finally {
@@ -91,7 +91,7 @@ export async function fetchNativeModels(
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       debugLog("native fetch aborted", { timeoutMs });
-      throw new Error(`native model fetch timed out after ${timeoutMs}ms`);
+      throw new Error(`native model fetch timed out after ${timeoutMs}ms`, { cause: error });
     }
     throw error;
   } finally {
@@ -163,7 +163,7 @@ export async function fetchNativeModelsWithTimeout(
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       debugLog("native fetch aborted", { timeoutMs });
-      throw new Error(`native model fetch timed out after ${timeoutMs}ms`);
+      throw new Error(`native model fetch timed out after ${timeoutMs}ms`, { cause: error });
     }
     throw error;
   } finally {
@@ -220,7 +220,7 @@ export async function loadLmStudioModel(
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       debugLog("load model aborted", { timeoutMs });
-      throw new Error(`model load timed out after ${timeoutMs}ms`);
+      throw new Error(`model load timed out after ${timeoutMs}ms`, { cause: error });
     }
     throw error;
   } finally {
@@ -268,7 +268,7 @@ export async function unloadLmStudioModel(
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
       debugLog("unload model aborted", { timeoutMs });
-      throw new Error(`model unload timed out after ${timeoutMs}ms`);
+      throw new Error(`model unload timed out after ${timeoutMs}ms`, { cause: error });
     }
     throw error;
   } finally {
@@ -350,7 +350,7 @@ export async function fetchLmStudioModels(
     return models;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
-      throw new Error(`model fetch timed out after ${timeoutMs}ms`);
+      throw new Error(`model fetch timed out after ${timeoutMs}ms`, { cause: error });
     }
     throw error;
   } finally {

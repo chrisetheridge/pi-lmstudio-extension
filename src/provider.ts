@@ -1,5 +1,4 @@
-import { consola } from "consola";
-import type { ExtensionAPI, ProviderConfig } from "@mariozechner/pi-coding-agent";
+import type { ProviderConfig } from "@mariozechner/pi-coding-agent";
 import { debugLog, log } from "./debug.js";
 import type { LmStudioConfig, LmStudioModelInfo, RefreshResult, RefreshProviderApi } from "./types.js";
 import { ZERO_COST, LOCAL_OPENAI_COMPAT } from "./config/defaults.js";
