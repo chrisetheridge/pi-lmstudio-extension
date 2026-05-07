@@ -43,30 +43,52 @@ function coercePartialConfig(value: Record<string, unknown>): Partial<LmStudioCo
   if (typeof value.reasoning === "boolean") config.reasoning = value.reasoning;
   if (typeof value.fetchTimeoutMs === "number") config.fetchTimeoutMs = value.fetchTimeoutMs;
   if (Array.isArray(value.input)) {
-    const input = value.input.filter((item): item is "text" | "image" => item === "text" || item === "image");
+    const input = value.input.filter(
+      (item): item is "text" | "image" => item === "text" || item === "image",
+    );
     if (input.length > 0) config.input = input;
   }
-  if (typeof value.modelMetadataSource === "string" && (value.modelMetadataSource === "auto" || value.modelMetadataSource === "openai" || value.modelMetadataSource === "native")) {
+  if (
+    typeof value.modelMetadataSource === "string" &&
+    (value.modelMetadataSource === "auto" ||
+      value.modelMetadataSource === "openai" ||
+      value.modelMetadataSource === "native")
+  ) {
     config.modelMetadataSource = value.modelMetadataSource;
   }
   if (typeof value.nativeBaseUrl === "string") config.nativeBaseUrl = value.nativeBaseUrl;
-  if (typeof value.includeEmbeddingModels === "boolean") config.includeEmbeddingModels = value.includeEmbeddingModels;
-  if (typeof value.modelManagementTimeoutMs === "number" && Number.isFinite(value.modelManagementTimeoutMs) && value.modelManagementTimeoutMs > 0) {
+  if (typeof value.includeEmbeddingModels === "boolean")
+    config.includeEmbeddingModels = value.includeEmbeddingModels;
+  if (
+    typeof value.modelManagementTimeoutMs === "number" &&
+    Number.isFinite(value.modelManagementTimeoutMs) &&
+    value.modelManagementTimeoutMs > 0
+  ) {
     config.modelManagementTimeoutMs = value.modelManagementTimeoutMs;
   }
   if (typeof value.autoRefresh === "boolean") config.autoRefresh = value.autoRefresh;
-  if (typeof value.refreshIntervalMs === "number" && Number.isFinite(value.refreshIntervalMs) && value.refreshIntervalMs > 0) {
+  if (
+    typeof value.refreshIntervalMs === "number" &&
+    Number.isFinite(value.refreshIntervalMs) &&
+    value.refreshIntervalMs > 0
+  ) {
     config.refreshIntervalMs = value.refreshIntervalMs;
   }
-  if (typeof value.notifyAutoRefreshChanges === "boolean") config.notifyAutoRefreshChanges = value.notifyAutoRefreshChanges;
+  if (typeof value.notifyAutoRefreshChanges === "boolean")
+    config.notifyAutoRefreshChanges = value.notifyAutoRefreshChanges;
 
   return config;
 }
 
-export function loadConfigFromSettings(cwd = process.cwd(), agentDir = getAgentDir()): LoadedConfig {
+export function loadConfigFromSettings(
+  cwd = process.cwd(),
+  agentDir = getAgentDir(),
+): LoadedConfig {
   const globalSettings = readLmStudioSettings(join(agentDir, "settings.json"));
   const projectSettings = readLmStudioSettings(join(cwd, ".pi", "settings.json"));
-  const warnings = [globalSettings.warning, projectSettings.warning].filter((warning): warning is string => !!warning);
+  const warnings = [globalSettings.warning, projectSettings.warning].filter(
+    (warning): warning is string => !!warning,
+  );
 
   return {
     config: mergeConfig(globalSettings.value, projectSettings.value),

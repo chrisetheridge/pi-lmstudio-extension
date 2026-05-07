@@ -71,7 +71,13 @@ export function registerCommands(
       try {
         const cwd = process.cwd();
         const loaded = loadConfigFromSettings(cwd);
-        const state = getState?.() ?? { lastResult: undefined, lastWarnings: [], lastRefreshAt: undefined, lastRefreshReason: undefined, lastRegisteredModels: [] };
+        const state = getState?.() ?? {
+          lastResult: undefined,
+          lastWarnings: [],
+          lastRefreshAt: undefined,
+          lastRefreshReason: undefined,
+          lastRegisteredModels: [],
+        };
         const lines: string[] = [
           `Endpoint: ${loaded.config.baseUrl}`,
           `Provider: ${loaded.config.providerName}`,
@@ -122,7 +128,13 @@ export function registerCommands(
       try {
         const cwd = ctx.cwd ?? process.cwd();
         const loaded = loadConfigFromSettings(cwd);
-        const state = getState?.() ?? { lastResult: undefined, lastWarnings: [], lastRefreshAt: undefined, lastRefreshReason: undefined, lastRegisteredModels: [] };
+        const state = getState?.() ?? {
+          lastResult: undefined,
+          lastWarnings: [],
+          lastRefreshAt: undefined,
+          lastRefreshReason: undefined,
+          lastRegisteredModels: [],
+        };
         ctx.ui.notify(formatDiagnosticConfig(loaded, state, cwd), "info");
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
@@ -136,7 +148,10 @@ export function registerCommands(
     handler: async (_args, ctx) => {
       const cwd = process.cwd();
       const loaded = loadConfigFromSettings(cwd);
-      let result: { models: import("../types.js").LmStudioModelInfo[]; source: "openai" | "native" };
+      let result: {
+        models: import("../types.js").LmStudioModelInfo[];
+        source: "openai" | "native";
+      };
       try {
         result = await fetchLmStudioModelInfo(loaded.config, fetch);
       } catch (error) {
@@ -161,7 +176,10 @@ export function registerCommands(
     handler: async (_args, ctx) => {
       const cwd = process.cwd();
       const loaded = loadConfigFromSettings(cwd);
-      let result: { models: import("../types.js").LmStudioModelInfo[]; source: "openai" | "native" };
+      let result: {
+        models: import("../types.js").LmStudioModelInfo[];
+        source: "openai" | "native";
+      };
       try {
         result = await fetchLmStudioModelInfo(loaded.config, fetch);
       } catch (error) {
@@ -200,7 +218,10 @@ export function registerCommands(
       const parts = args.split(" ");
       const modelName = parts[0];
       if (!modelName) {
-        ctx.ui.notify("Usage: /lmstudio-load <model-id> [--context-length <n>] [--flash-attention <true|false>] [--gpu-layers <n>] [--num-gpu <n>]", "warning");
+        ctx.ui.notify(
+          "Usage: /lmstudio-load <model-id> [--context-length <n>] [--flash-attention <true|false>] [--gpu-layers <n>] [--num-gpu <n>]",
+          "warning",
+        );
         return;
       }
 
@@ -208,7 +229,10 @@ export function registerCommands(
 
       const result = await loadLmStudioModel(loaded.config, { model: modelName }, fetch);
       if (result.status === "success") {
-        ctx.ui.notify(`OK: Model loaded (instance: ${result.instance_id}, time: ${result.load_time_seconds}s)`, "info");
+        ctx.ui.notify(
+          `OK: Model loaded (instance: ${result.instance_id}, time: ${result.load_time_seconds}s)`,
+          "info",
+        );
         await refreshFn(cwd);
       } else {
         ctx.ui.notify(`Load failed: ${result.status}`, "error");

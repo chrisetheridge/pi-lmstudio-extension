@@ -21,10 +21,12 @@ export function mergeConfig(
 ): LmStudioConfig {
   const merged = { ...DEFAULT_CONFIG, ...globalConfig, ...projectConfig };
   const baseUrl = normalizeOpenAiBaseUrl(merged.baseUrl);
-  const hasConfiguredNativeBaseUrl = globalConfig.nativeBaseUrl !== undefined || projectConfig.nativeBaseUrl !== undefined;
-  const nativeBaseUrl = hasConfiguredNativeBaseUrl && merged.nativeBaseUrl !== undefined
-    ? normalizeNativeBaseUrl(merged.nativeBaseUrl)
-    : deriveNativeBaseUrl(baseUrl);
+  const hasConfiguredNativeBaseUrl =
+    globalConfig.nativeBaseUrl !== undefined || projectConfig.nativeBaseUrl !== undefined;
+  const nativeBaseUrl =
+    hasConfiguredNativeBaseUrl && merged.nativeBaseUrl !== undefined
+      ? normalizeNativeBaseUrl(merged.nativeBaseUrl)
+      : deriveNativeBaseUrl(baseUrl);
   return {
     ...merged,
     baseUrl,
@@ -36,14 +38,18 @@ export function mergeConfig(
       DEFAULT_CONFIG.modelManagementTimeoutMs,
     ),
     input: merged.input.length > 0 ? merged.input : DEFAULT_CONFIG.input,
-    modelMetadataSource: (merged.modelMetadataSource === "auto" || merged.modelMetadataSource === "openai" || merged.modelMetadataSource === "native")
-      ? merged.modelMetadataSource
-      : DEFAULT_CONFIG.modelMetadataSource,
+    modelMetadataSource:
+      merged.modelMetadataSource === "auto" ||
+      merged.modelMetadataSource === "openai" ||
+      merged.modelMetadataSource === "native"
+        ? merged.modelMetadataSource
+        : DEFAULT_CONFIG.modelMetadataSource,
     nativeBaseUrl,
     includeEmbeddingModels: merged.includeEmbeddingModels ?? DEFAULT_CONFIG.includeEmbeddingModels,
     autoRefresh: merged.autoRefresh ?? DEFAULT_CONFIG.autoRefresh,
     refreshIntervalMs: clampRefreshIntervalMs(merged.refreshIntervalMs),
-    notifyAutoRefreshChanges: merged.notifyAutoRefreshChanges ?? DEFAULT_CONFIG.notifyAutoRefreshChanges,
+    notifyAutoRefreshChanges:
+      merged.notifyAutoRefreshChanges ?? DEFAULT_CONFIG.notifyAutoRefreshChanges,
   };
 }
 

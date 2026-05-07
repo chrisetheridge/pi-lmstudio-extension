@@ -5,7 +5,13 @@ import { refreshProvider } from "../provider.js";
 import { fetchLmStudioModelInfo } from "../models/fetch.js";
 import { registerCommands } from "./commands.js";
 import type { RefreshResult, RefreshReason, LmStudioConfig } from "../types.js";
-import { createRefreshState, updateRefreshState, startAutoRefresh, detectModelChanges, formatChangeNotification } from "../polling.js";
+import {
+  createRefreshState,
+  updateRefreshState,
+  startAutoRefresh,
+  detectModelChanges,
+  formatChangeNotification,
+} from "../polling.js";
 
 export default async function lmStudioExtension(pi: ExtensionAPI) {
   const state = createRefreshState();
@@ -20,7 +26,10 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
     default: false,
   });
 
-  async function refresh(cwd = process.cwd(), reason: RefreshReason = "startup"): Promise<RefreshResult> {
+  async function refresh(
+    cwd = process.cwd(),
+    reason: RefreshReason = "startup",
+  ): Promise<RefreshResult> {
     try {
       log.debug(`refreshing from cwd (${reason}): ${cwd}`);
       const loaded = loadConfigFromSettings(cwd);
@@ -28,20 +37,28 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
       if (loaded.warnings.length > 0) {
         log.debug(`config warnings: ${loaded.warnings.join(", ")}`);
       }
-      log.debug(`effective config: baseUrl=${loaded.config.baseUrl}, provider=${loaded.config.providerName}, contextWindow=${loaded.config.contextWindow}, maxTokens=${loaded.config.maxTokens}`);
+      log.debug(
+        `effective config: baseUrl=${loaded.config.baseUrl}, provider=${loaded.config.providerName}, contextWindow=${loaded.config.contextWindow}, maxTokens=${loaded.config.maxTokens}`,
+      );
       // Fetch model info to update completion cache for native models
       const modelInfoResult = await fetchLmStudioModelInfo(loaded.config, fetch);
       if (modelInfoResult.source === "native") {
         // Completion cache is updated via commands module; no-op here during refresh
       }
-      const result = await refreshProvider(pi, loaded.config, undefined, { quiet: cwd === initialCwd });
-      state.lastRegisteredModels = sortedModelIds(result.ok ? result.models : state.lastRegisteredModels);
+      const result = await refreshProvider(pi, loaded.config, undefined, {
+        quiet: cwd === initialCwd,
+      });
+      state.lastRegisteredModels = sortedModelIds(
+        result.ok ? result.models : state.lastRegisteredModels,
+      );
       updateRefreshState(state, result, reason);
       return result;
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
       const failed: RefreshResult = { ok: false, error: msg };
-      state.lastRegisteredModels = sortedModelIds(state.lastResult?.ok ? state.lastResult.models : []);
+      state.lastRegisteredModels = sortedModelIds(
+        state.lastResult?.ok ? state.lastResult.models : [],
+      );
       updateRefreshState(state, failed, reason);
       return failed;
     }
@@ -139,5 +156,3 @@ export default async function lmStudioExtension(pi: ExtensionAPI) {
     }
   });
 }
-
-

@@ -59,6 +59,4 @@ export {
 } from "./extension/autocomplete.js";
 
 // Re-export command functions
-export {
-  registerCommands,
-} from "./extension/commands.js";
+export { registerCommands } from "./extension/commands.js";

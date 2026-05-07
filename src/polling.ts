@@ -6,10 +6,7 @@ function sortedModelIds(models: string[]): string[] {
 }
 
 /** Compare two sets of model IDs and return added/removed. */
-export function detectModelChanges(
-  previous: string[],
-  current: string[],
-): ModelChange {
+export function detectModelChanges(previous: string[], current: string[]): ModelChange {
   const prevSet = new Set(previous);
   const currSet = new Set(current);
   const added: string[] = [];
@@ -68,10 +65,7 @@ export function updateRefreshState(
 }
 
 /** Start an auto-refresh timer. Returns a cleanup function. */
-export function startAutoRefresh(
-  intervalMs: number,
-  onTick: () => void,
-): () => void {
+export function startAutoRefresh(intervalMs: number, onTick: () => void): () => void {
   const id = setInterval(onTick, intervalMs) as unknown as ReturnType<typeof setInterval>;
 
   // Mark the interval so it can be cleared without leaking in Node.js

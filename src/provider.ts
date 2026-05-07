@@ -1,9 +1,17 @@
 import type { ProviderConfig } from "@mariozechner/pi-coding-agent";
 import { debugLog, log } from "./debug.js";
-import type { LmStudioConfig, LmStudioModelInfo, RefreshResult, RefreshProviderApi } from "./types.js";
+import type {
+  LmStudioConfig,
+  LmStudioModelInfo,
+  RefreshResult,
+  RefreshProviderApi,
+} from "./types.js";
 import { ZERO_COST, LOCAL_OPENAI_COMPAT } from "./config/defaults.js";
 
-export function buildProviderConfig(config: LmStudioConfig, models: LmStudioModelInfo[]): ProviderConfig {
+export function buildProviderConfig(
+  config: LmStudioConfig,
+  models: LmStudioModelInfo[],
+): ProviderConfig {
   const providerModels = models.map((model) => ({
     id: model.id,
     name: model.name,
@@ -35,17 +43,28 @@ export function buildProviderConfig(config: LmStudioConfig, models: LmStudioMode
 export async function refreshProvider(
   pi: RefreshProviderApi,
   config: LmStudioConfig,
-  fetchModelInfo: (config: LmStudioConfig) => Promise<{ models: LmStudioModelInfo[]; source: "openai" | "native" }> = async (currentConfig) =>
-    (await import("./models/fetch.js")).fetchLmStudioModelInfo(currentConfig, fetch),
+  fetchModelInfo: (
+    config: LmStudioConfig,
+  ) => Promise<{ models: LmStudioModelInfo[]; source: "openai" | "native" }> = async (
+    currentConfig,
+  ) => (await import("./models/fetch.js")).fetchLmStudioModelInfo(currentConfig, fetch),
   options?: { quiet?: boolean },
 ): Promise<RefreshResult> {
   const start = performance.now();
   debugLog(`refreshing provider '${config.providerName}' at ${config.baseUrl}`);
-  debugLog("refresh start", { providerName: config.providerName, baseUrl: config.baseUrl, fetchTimeoutMs: config.fetchTimeoutMs });
+  debugLog("refresh start", {
+    providerName: config.providerName,
+    baseUrl: config.baseUrl,
+    fetchTimeoutMs: config.fetchTimeoutMs,
+  });
 
   try {
     const { models, source } = await fetchModelInfo(config);
-    debugLog("refresh result", { modelCount: models.length, source, modelIds: models.map((m) => m.id) });
+    debugLog("refresh result", {
+      modelCount: models.length,
+      source,
+      modelIds: models.map((m) => m.id),
+    });
     if (models.length === 0) {
       const message = `no models found, unregistering provider '${config.providerName}'`;
       if (options?.quiet) {
@@ -58,7 +77,9 @@ export async function refreshProvider(
       const providerConfig = buildProviderConfig(config, models);
       pi.registerProvider(config.providerName, providerConfig);
       const ms = (performance.now() - start).toFixed(2);
-      debugLog(`provider '${config.providerName}' registered with ${models.length} model${models.length === 1 ? "" : "s"} in ${ms}ms (source: ${source})`);
+      debugLog(
+        `provider '${config.providerName}' registered with ${models.length} model${models.length === 1 ? "" : "s"} in ${ms}ms (source: ${source})`,
+      );
     }
 
     return { ok: true, count: models.length, models: models.map((m) => m.id), source };

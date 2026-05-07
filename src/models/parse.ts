@@ -16,7 +16,10 @@ export function parseModelsPayload(payload: unknown): string[] {
 }
 
 /** Extract capabilities from an OpenAI-compatible model entry. */
-function extractCapabilities(entry: Record<string, unknown>): { vision: boolean; toolUse: boolean } {
+function extractCapabilities(entry: Record<string, unknown>): {
+  vision: boolean;
+  toolUse: boolean;
+} {
   const capabilities = entry.capabilities;
   let vision = false;
   let toolUse = false;
@@ -106,8 +109,12 @@ export function parseNativeModelsPayload(payload: unknown): LmStudioModelInfo[] 
     if (!id) continue;
 
     const capabilities = isRecord(entry.capabilities) ? entry.capabilities : undefined;
-    const vision = capabilities && typeof capabilities.vision === "boolean" ? capabilities.vision : false;
-    const toolUse = capabilities && typeof capabilities.trained_for_tool_use === "boolean" ? capabilities.trained_for_tool_use : false;
+    const vision =
+      capabilities && typeof capabilities.vision === "boolean" ? capabilities.vision : false;
+    const toolUse =
+      capabilities && typeof capabilities.trained_for_tool_use === "boolean"
+        ? capabilities.trained_for_tool_use
+        : false;
 
     // Determine context length from loaded instances first, then max_context_length
     let contextWindow: number | undefined;
@@ -119,17 +126,19 @@ export function parseNativeModelsPayload(payload: unknown): LmStudioModelInfo[] 
       const instId = typeof inst.id === "string" ? inst.id : undefined;
       if (instId) loadedInstanceIds.push(instId);
       const config = isRecord(inst.config) ? inst.config : undefined;
-      const instCtx = typeof inst.context_length === "number"
-        ? inst.context_length
-        : typeof config?.context_length === "number"
-          ? config.context_length
-          : undefined;
+      const instCtx =
+        typeof inst.context_length === "number"
+          ? inst.context_length
+          : typeof config?.context_length === "number"
+            ? config.context_length
+            : undefined;
       if (instCtx !== undefined && contextWindow === undefined) {
         contextWindow = instCtx;
       }
     }
 
-    const maxCtxLength = typeof entry.max_context_length === "number" ? entry.max_context_length : undefined;
+    const maxCtxLength =
+      typeof entry.max_context_length === "number" ? entry.max_context_length : undefined;
 
     results.push({
       id,

@@ -86,7 +86,10 @@ export interface ModelChange {
 }
 
 interface RefreshProviderApi {
-  registerProvider(name: string, config: import("@mariozechner/pi-coding-agent").ProviderConfig): void;
+  registerProvider(
+    name: string,
+    config: import("@mariozechner/pi-coding-agent").ProviderConfig,
+  ): void;
   unregisterProvider?(name: string): void;
 }
 

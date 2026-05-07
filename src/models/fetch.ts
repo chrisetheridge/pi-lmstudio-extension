@@ -21,7 +21,11 @@ export async function fetchOpenAiModels(
 ): Promise<import("../types.js").LmStudioModelInfo[]> {
   const cleanUrl = config.baseUrl.replace(/\/+$/, "");
   fetchLog.debug(`fetching models from ${cleanUrl}/models (timeout: ${config.fetchTimeoutMs}ms)`);
-  debugLog("openai fetch request", { url: `${cleanUrl}/models`, timeoutMs: config.fetchTimeoutMs, hasApiKey: !!config.apiKey });
+  debugLog("openai fetch request", {
+    url: `${cleanUrl}/models`,
+    timeoutMs: config.fetchTimeoutMs,
+    hasApiKey: !!config.apiKey,
+  });
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), config.fetchTimeoutMs);
@@ -34,7 +38,12 @@ export async function fetchOpenAiModels(
     });
     const fetchMs = (performance.now() - start).toFixed(2);
     fetchLog.debug(`fetch response received in ${fetchMs}ms (status: ${response.status})`);
-    debugLog("openai fetch response", { status: response.status, statusText: response.statusText, headers: Object.fromEntries(response.headers.entries()), ok: response.ok });
+    debugLog("openai fetch response", {
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+      ok: response.ok,
+    });
 
     if (!response.ok) {
       const body = await response.text().catch(() => "<unreadable>");
@@ -43,7 +52,9 @@ export async function fetchOpenAiModels(
     }
 
     const models = parseOpenAiModelsPayload(await response.json());
-    debugLog(`found ${models.length} model${models.length === 1 ? "" : "s"} via OpenAI-compatible endpoint`);
+    debugLog(
+      `found ${models.length} model${models.length === 1 ? "" : "s"} via OpenAI-compatible endpoint`,
+    );
     return models;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -77,12 +88,19 @@ export async function fetchNativeModels(
     });
     const fetchMs = (performance.now() - start).toFixed(2);
     fetchLog.debug(`fetch response received in ${fetchMs}ms (status: ${response.status})`);
-    debugLog("native fetch response", { status: response.status, statusText: response.statusText, headers: Object.fromEntries(response.headers.entries()), ok: response.ok });
+    debugLog("native fetch response", {
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+      ok: response.ok,
+    });
 
     if (!response.ok) {
       const body = await response.text().catch(() => "<unreadable>");
       debugLog("native fetch error response", { status: response.status, body });
-      throw new Error(`native model fetch failed: ${response.status} ${response.statusText}`.trim());
+      throw new Error(
+        `native model fetch failed: ${response.status} ${response.statusText}`.trim(),
+      );
     }
 
     const models = parseNativeModelsPayload(await response.json());
@@ -149,12 +167,19 @@ export async function fetchNativeModelsWithTimeout(
     });
     const fetchMs = (performance.now() - start).toFixed(2);
     fetchLog.debug(`fetch response received in ${fetchMs}ms (status: ${response.status})`);
-    debugLog("native fetch response", { status: response.status, statusText: response.statusText, headers: Object.fromEntries(response.headers.entries()), ok: response.ok });
+    debugLog("native fetch response", {
+      status: response.status,
+      statusText: response.statusText,
+      headers: Object.fromEntries(response.headers.entries()),
+      ok: response.ok,
+    });
 
     if (!response.ok) {
       const body = await response.text().catch(() => "<unreadable>");
       debugLog("native fetch error response", { status: response.status, body });
-      throw new Error(`native model fetch failed: ${response.status} ${response.statusText}`.trim());
+      throw new Error(
+        `native model fetch failed: ${response.status} ${response.statusText}`.trim(),
+      );
     }
 
     const models = parseNativeModelsPayload(await response.json());
@@ -192,7 +217,8 @@ export async function loadLmStudioModel(
   if (args.flashAttention !== undefined) body.flash_attention = args.flashAttention;
   if (args.evalBatchSize !== undefined) body.eval_batch_size = args.evalBatchSize;
   if (args.numExperts !== undefined) body.num_experts = args.numExperts;
-  if (args.offloadKvCacheToGpu !== undefined) body.offload_kv_cache_to_gpu = args.offloadKvCacheToGpu;
+  if (args.offloadKvCacheToGpu !== undefined)
+    body.offload_kv_cache_to_gpu = args.offloadKvCacheToGpu;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
@@ -206,16 +232,25 @@ export async function loadLmStudioModel(
       body: JSON.stringify(body),
     });
     const fetchMs = (performance.now() - start).toFixed(2);
-    debugLog("load model response", { status: response.status, statusText: response.statusText, elapsedMs: fetchMs });
+    debugLog("load model response", {
+      status: response.status,
+      statusText: response.statusText,
+      elapsedMs: fetchMs,
+    });
 
     if (!response.ok) {
       const bodyText = await response.text().catch(() => "<unreadable>");
       debugLog("load model error response", { status: response.status, body: bodyText });
-      throw new Error(`model load failed: ${response.status} ${response.statusText}${bodyText ? ` (${bodyText})` : ""}`.trim());
+      throw new Error(
+        `model load failed: ${response.status} ${response.statusText}${bodyText ? ` (${bodyText})` : ""}`.trim(),
+      );
     }
 
     const result = (await response.json()) as LoadModelResult;
-    debugLog("load model success", { instanceId: result.instance_id, loadTimeSeconds: result.load_time_seconds });
+    debugLog("load model success", {
+      instanceId: result.instance_id,
+      loadTimeSeconds: result.load_time_seconds,
+    });
     return result;
   } catch (error) {
     if (error instanceof Error && error.name === "AbortError") {
@@ -254,12 +289,18 @@ export async function unloadLmStudioModel(
       body,
     });
     const fetchMs = (performance.now() - start).toFixed(2);
-    debugLog("unload model response", { status: response.status, statusText: response.statusText, elapsedMs: fetchMs });
+    debugLog("unload model response", {
+      status: response.status,
+      statusText: response.statusText,
+      elapsedMs: fetchMs,
+    });
 
     if (!response.ok) {
       const bodyText = await response.text().catch(() => "<unreadable>");
       debugLog("unload model error response", { status: response.status, body: bodyText });
-      throw new Error(`model unload failed: ${response.status} ${response.statusText}${bodyText ? ` (${bodyText})` : ""}`.trim());
+      throw new Error(
+        `model unload failed: ${response.status} ${response.statusText}${bodyText ? ` (${bodyText})` : ""}`.trim(),
+      );
     }
 
     const result = (await response.json()) as UnloadModelResult;
@@ -290,7 +331,11 @@ export async function fetchLmStudioModelInfo(
   config: LmStudioConfig,
   fetchImpl: FetchLike = fetch,
 ): Promise<{ models: import("../types.js").LmStudioModelInfo[]; source: "openai" | "native" }> {
-  debugLog("fetch model info", { modelMetadataSource: config.modelMetadataSource, baseUrl: config.baseUrl, nativeBaseUrl: config.nativeBaseUrl });
+  debugLog("fetch model info", {
+    modelMetadataSource: config.modelMetadataSource,
+    baseUrl: config.baseUrl,
+    nativeBaseUrl: config.nativeBaseUrl,
+  });
 
   if (config.modelMetadataSource === "native") {
     debugLog("using native metadata source (explicit)");

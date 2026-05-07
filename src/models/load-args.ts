@@ -77,7 +77,8 @@ export function parseLoadArgs(args: string): LoadModelCommandArgs {
       case "--flash-attention": {
         if (value !== undefined) {
           const parsed = parseBooleanArg(value);
-          if (parsed === undefined) throw new Error(`--flash-attention expects true or false, got "${value}"`);
+          if (parsed === undefined)
+            throw new Error(`--flash-attention expects true or false, got "${value}"`);
           result.flashAttention = parsed;
         } else {
           // Flag without value defaults to true
@@ -98,7 +99,8 @@ export function parseLoadArgs(args: string): LoadModelCommandArgs {
       case "--offload-kv-cache-to-gpu": {
         if (value !== undefined) {
           const parsed = parseBooleanArg(value);
-          if (parsed === undefined) throw new Error(`--offload-kv-cache-to-gpu expects true or false, got "${value}"`);
+          if (parsed === undefined)
+            throw new Error(`--offload-kv-cache-to-gpu expects true or false, got "${value}"`);
           result.offloadKvCacheToGpu = parsed;
         } else {
           result.offloadKvCacheToGpu = true;
@@ -106,7 +108,9 @@ export function parseLoadArgs(args: string): LoadModelCommandArgs {
         break;
       }
       default:
-        throw new Error(`unknown flag "${token}" — supported flags are --context-length, --flash-attention, --eval-batch-size, --num-experts, --offload-kv-cache-to-gpu`);
+        throw new Error(
+          `unknown flag "${token}" — supported flags are --context-length, --flash-attention, --eval-batch-size, --num-experts, --offload-kv-cache-to-gpu`,
+        );
     }
   }
 

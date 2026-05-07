@@ -21,7 +21,8 @@ export function isDebugEnabled(): boolean {
 
 export function configureDebugLogging(flagValue: boolean | string | undefined): void {
   const debugFromFlag = flagValue === true;
-  const debugFromEnv = process.env.PI_LMSTUDIO_DEBUG === "1" || process.env.PI_LMSTUDIO_DEBUG === "true";
+  const debugFromEnv =
+    process.env.PI_LMSTUDIO_DEBUG === "1" || process.env.PI_LMSTUDIO_DEBUG === "true";
   debugEnabled = debugFromFlag || debugFromEnv;
   if (debugEnabled) {
     log.info("LM Studio debug mode enabled");
@@ -40,7 +41,9 @@ export function timed<T>(label: string, fn: () => Promise<T>): Promise<T> {
     })
     .catch((err) => {
       const ms = performance.now() - start;
-      log.error(`✗ ${label} failed after ${ms.toFixed(2)}ms: ${err instanceof Error ? err.message : err}`);
+      log.error(
+        `✗ ${label} failed after ${ms.toFixed(2)}ms: ${err instanceof Error ? err.message : err}`,
+      );
       throw err;
     });
 }
