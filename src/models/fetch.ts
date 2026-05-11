@@ -144,58 +144,6 @@ function buildHeaders(hasApiKey: boolean, extraHeaders?: Record<string, string>)
   return headers;
 }
 
-/** Fetch models using the native /api/v1/models endpoint with a custom timeout. */
-export async function fetchNativeModelsWithTimeout(
-  baseUrl: string,
-  timeoutMs: number,
-  apiKey: string,
-  fetchImpl: FetchLike = fetch,
-): Promise<import("../types.js").LmStudioModelInfo[]> {
-  const nativeUrl = nativeModelsUrl(normalizeNativeBaseUrl(baseUrl));
-  fetchLog.debug(`fetching models from ${nativeUrl} (timeout: ${timeoutMs}ms)`);
-  debugLog("native fetch request", { url: nativeUrl, timeoutMs, hasApiKey: !!apiKey });
-
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    const start = performance.now();
-    const response = await fetchImpl(nativeUrl, {
-      method: "GET",
-      signal: controller.signal,
-      headers: buildHeaders(apiKey !== ""),
-    });
-    const fetchMs = (performance.now() - start).toFixed(2);
-    fetchLog.debug(`fetch response received in ${fetchMs}ms (status: ${response.status})`);
-    debugLog("native fetch response", {
-      status: response.status,
-      statusText: response.statusText,
-      headers: Object.fromEntries(response.headers.entries()),
-      ok: response.ok,
-    });
-
-    if (!response.ok) {
-      const body = await response.text().catch(() => "<unreadable>");
-      debugLog("native fetch error response", { status: response.status, body });
-      throw new Error(
-        `native model fetch failed: ${response.status} ${response.statusText}`.trim(),
-      );
-    }
-
-    const models = parseNativeModelsPayload(await response.json());
-    // fetchLog.info(`found ${models.length} model${models.length === 1 ? "" : "s"} via native endpoint`);
-    return models;
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      debugLog("native fetch aborted", { timeoutMs });
-      throw new Error(`native model fetch timed out after ${timeoutMs}ms`, { cause: error });
-    }
-    throw error;
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
 /** Load a model using the native /api/v1/models/load endpoint. */
 export async function loadLmStudioModel(
   config: LmStudioConfig,

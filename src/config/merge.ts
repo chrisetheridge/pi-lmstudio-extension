@@ -1,6 +1,6 @@
 import type { LmStudioConfig } from "../types.js";
 import { DEFAULT_CONFIG } from "./defaults.js";
-import { normalizeOpenAiBaseUrl, normalizeNativeBaseUrl } from "../url.js";
+import { deriveNativeBaseUrl, normalizeOpenAiBaseUrl, normalizeNativeBaseUrl } from "../url.js";
 
 const MIN_REFRESH_INTERVAL_MS = 5000;
 
@@ -51,12 +51,4 @@ export function mergeConfig(
     notifyAutoRefreshChanges:
       merged.notifyAutoRefreshChanges ?? DEFAULT_CONFIG.notifyAutoRefreshChanges,
   };
-}
-
-function deriveNativeBaseUrl(baseUrl: string): string {
-  const normalized = baseUrl.replace(/\/+$/, "");
-  if (normalized.endsWith("/v1")) {
-    return normalized.slice(0, -3) + "/api/v1";
-  }
-  return normalized + "/api/v1";
 }
