@@ -28,4 +28,4 @@ const LOCAL_OPENAI_COMPAT = {
   maxTokensField: "max_tokens" as const,
 };
 
-export { ZERO_COST, LOCAL_OPENAI_COMPAT };
+export { LOCAL_OPENAI_COMPAT, ZERO_COST };

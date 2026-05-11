@@ -1,12 +1,12 @@
 import type { ProviderConfig } from "@mariozechner/pi-coding-agent";
+import { LOCAL_OPENAI_COMPAT, ZERO_COST } from "./config/defaults.js";
 import { debugLog, log } from "./debug.js";
 import type {
   LmStudioConfig,
   LmStudioModelInfo,
-  RefreshResult,
   RefreshProviderApi,
+  RefreshResult,
 } from "./types.js";
-import { ZERO_COST, LOCAL_OPENAI_COMPAT } from "./config/defaults.js";
 
 export function buildProviderConfig(
   config: LmStudioConfig,

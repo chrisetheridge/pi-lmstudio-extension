@@ -93,4 +93,4 @@ interface RefreshProviderApi {
   unregisterProvider?(name: string): void;
 }
 
-export { RefreshProviderApi };
+export type { RefreshProviderApi };

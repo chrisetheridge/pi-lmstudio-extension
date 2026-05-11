@@ -6,8 +6,12 @@
   "private": true,
   "scripts": {
     "check": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "pack:dry-run": "npm pack --dry-run"
+    "lint": "biome check .",
+    "verify": "npm run check && npm test && npm run lint",
+    "pack:dry-run": "npm pack --dry-run",
+    "prepare": "husky"
   },
   "keywords": [
     "pi-package",
@@ -38,12 +42,15 @@
     "@types/node": "^22.15.3",
     "eslint": "^10.3.0",
     "globals": "^17.6.0",
+    "husky": "^9.1.7",
     "jiti": "^2.6.1",
+    "lint-staged": "^16.4.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.59.2",
     "vitest": "^3.1.2"
   },
   "dependencies": {
     "consola": "^3.4.2"
-  }
+  },
+  "packageManager": "pnpm@11.0.0+sha512.5bd187500e49cc6c3d891d973b432c02b844a5eb7209172c90a517a3ef4f579ed5c23d409b699e6a9dc418ff7b2b1890e63f6d74f1d3fc49848f37779c89c84c"
 }

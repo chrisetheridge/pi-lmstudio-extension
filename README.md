@@ -246,6 +246,13 @@ Change `lmstudio.providerName` in Pi settings. That changes the prefix shown in 
 
 ```bash
 npm install
-npm test
+npm run verify
+```
+
+Verification runs TypeScript checking, Vitest, and Biome checks. Individual commands are also available:
+
+```bash
 npm run check
+npm test
+npm run lint
 ```

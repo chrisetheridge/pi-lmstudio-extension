@@ -1,17 +1,17 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { debugLog, log, isDebugEnabled, configureDebugLogging } from "../debug.js";
 import { loadConfigFromSettings } from "../config/load.js";
-import { refreshProvider } from "../provider.js";
+import { configureDebugLogging, debugLog, isDebugEnabled, log } from "../debug.js";
 import { fetchLmStudioModelInfo } from "../models/fetch.js";
-import { registerCommands } from "./commands.js";
-import type { RefreshResult, RefreshReason, LmStudioConfig } from "../types.js";
 import {
   createRefreshState,
-  updateRefreshState,
-  startAutoRefresh,
   detectModelChanges,
   formatChangeNotification,
+  startAutoRefresh,
+  updateRefreshState,
 } from "../polling.js";
+import { refreshProvider } from "../provider.js";
+import type { LmStudioConfig, RefreshReason, RefreshResult } from "../types.js";
+import { registerCommands } from "./commands.js";
 
 export default async function lmStudioExtension(pi: ExtensionAPI) {
   const state = createRefreshState();

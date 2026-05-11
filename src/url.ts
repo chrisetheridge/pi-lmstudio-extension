@@ -6,10 +6,10 @@ export function deriveNativeBaseUrl(baseUrl: string): string {
   let result: string;
   // Replace trailing /v1 with /api/v1
   if (normalized.endsWith("/v1")) {
-    result = normalized.slice(0, -3) + "/api/v1";
+    result = `${normalized.slice(0, -3)}/api/v1`;
   } else {
     // If it doesn't end in /v1, just append /api/v1
-    result = normalized + "/api/v1";
+    result = `${normalized}/api/v1`;
   }
   debugLog("derived native base URL", { from: baseUrl, to: result });
   return result;

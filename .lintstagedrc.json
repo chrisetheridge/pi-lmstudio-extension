@@ -1,0 +1,4 @@
+{
+  "{biome.json,package.json,tsconfig.json}": "biome check --write --no-errors-on-unmatched",
+  "src/**/*.ts": "biome check --write --no-errors-on-unmatched"
+}

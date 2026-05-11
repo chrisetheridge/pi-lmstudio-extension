@@ -1,6 +1,6 @@
 import type { LmStudioConfig } from "../types.js";
+import { deriveNativeBaseUrl, normalizeNativeBaseUrl, normalizeOpenAiBaseUrl } from "../url.js";
 import { DEFAULT_CONFIG } from "./defaults.js";
-import { deriveNativeBaseUrl, normalizeOpenAiBaseUrl, normalizeNativeBaseUrl } from "../url.js";
 
 const MIN_REFRESH_INTERVAL_MS = 5000;
 

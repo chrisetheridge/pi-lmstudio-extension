@@ -1,16 +1,16 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { debugLog } from "../debug.js";
 import { loadConfigFromSettings } from "../config/load.js";
+import { debugLog } from "../debug.js";
 
 import { fetchLmStudioModelInfo, loadLmStudioModel, unloadLmStudioModel } from "../models/fetch.js";
 
 import type { RefreshResult } from "../types.js";
 import {
+  type CompletionCache,
   createCompletionCache,
-  updateCacheFromNativeModels,
   getLoadArgumentCompletions,
   getLoadedInstanceIdCompletions,
-  type CompletionCache,
+  updateCacheFromNativeModels,
 } from "./autocomplete.js";
 
 let completionCache: CompletionCache = createCompletionCache();

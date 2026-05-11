@@ -1,15 +1,15 @@
 import { consola } from "consola";
+import { DEFAULT_CONFIG } from "../config/defaults.js";
 import { debugLog } from "../debug.js";
 import type {
-  LmStudioConfig,
   FetchLike,
+  LmStudioConfig,
   LoadModelCommandArgs,
   LoadModelResult,
   UnloadModelResult,
 } from "../types.js";
-import { DEFAULT_CONFIG } from "../config/defaults.js";
-import { parseOpenAiModelsPayload, parseNativeModelsPayload } from "./parse.js";
 import { deriveNativeBaseUrl } from "../url.js";
+import { parseNativeModelsPayload, parseOpenAiModelsPayload } from "./parse.js";
 
 const NAMESPACE = "lmstudio";
 const fetchLog = consola.withTag(NAMESPACE);
@@ -139,7 +139,7 @@ function unloadModelUrl(nativeBaseUrl: string): string {
 function buildHeaders(hasApiKey: boolean, extraHeaders?: Record<string, string>): HeadersInit {
   const headers: Record<string, string> = { ...extraHeaders };
   if (hasApiKey) {
-    headers["Authorization"] = `Bearer lm`;
+    headers.Authorization = `Bearer lm`;
   }
   return headers;
 }
